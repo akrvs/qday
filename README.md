@@ -18,7 +18,7 @@
 ![category](https://img.shields.io/badge/category-Security%20%2F%20PQC-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Hard-red)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-15%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-19%20passing-brightgreen)
 ![deps](https://img.shields.io/badge/runtime%20deps-2-brightgreen)
 
 ```
@@ -80,17 +80,39 @@ the dashboard runs air-gapped.
 ## [ Engage ] — usage
 
 ```sh
-# Scan any mix of targets; each scan appends a run
+# Scan any mix of targets; each scan appends a run.
+# TLS endpoints scan in parallel and inventory the full served chain.
 qday scan --tls api.example.com:443 --certs /etc/ssl --code ~/repos/backend
+
+# CI gate: exit 3 the moment anything reaches the threshold
+qday scan --code . --fail-on critical
 
 # Inventory for the latest run, ranked by risk (--json for machines)
 qday report
+
+# What changed between runs: +new, -resolved, persisting
+qday diff
 
 # CycloneDX 1.6 CBOM — cryptographic-asset components, audit-ready
 qday export -o cbom.json
 
 # The scoreboard: % PQC-safe, deadline countdowns, risk breakdown, trend
 qday serve --port 8080
+```
+
+Repeatable scans live in `qday.toml` (picked up automatically), which is also
+where the humans feed the risk model what no scanner can discover:
+
+```toml
+[scan]
+tls   = ["api.example.com:443", "vpn.example.com:8443"]
+certs = ["/etc/ssl"]
+code  = ["../backend"]
+
+[[annotate]]
+match          = "api.example.com*"   # fnmatch against asset location
+lifespan_years = 25                   # harvest-now-decrypt-later horizon
+exposure       = "public"
 ```
 
 ## [ Scoring ] — the risk model
@@ -116,8 +138,10 @@ qday serve --port 8080
 
 ## [ Next Ops ]
 
-- [ ] Full certificate chain + port-range endpoint discovery
-- [ ] Lifespan/exposure annotations via config file instead of defaults
+- [x] Full certificate chain capture (leaf / intermediate / root roles)
+- [x] Lifespan/exposure annotations via `qday.toml`
+- [x] Run-to-run diff + `--fail-on` CI gate
+- [ ] Port-range / subnet endpoint discovery
 - [ ] Dependency-manifest scanning (lockfiles → known crypto libraries)
 - [ ] Crypto-agility layer: algorithm choice behind config, so the eventual
       PQC swap is a config change, not a code rewrite
