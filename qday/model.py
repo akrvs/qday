@@ -17,6 +17,7 @@ class AssetType(str, Enum):
     TLS_ENDPOINT = "tls-endpoint"
     KEY_MATERIAL = "key-material"
     CODE_FINDING = "code-finding"
+    DEPENDENCY = "dependency"
 
 
 class Exposure(str, Enum):

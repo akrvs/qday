@@ -19,6 +19,7 @@ _CDX_ASSET_TYPE = {
     "key-material": "related-crypto-material",
     "tls-endpoint": "protocol",
     "code-finding": "algorithm",
+    "dependency": "algorithm",
 }
 
 # Shor-broken families get NIST quantum security level 0.

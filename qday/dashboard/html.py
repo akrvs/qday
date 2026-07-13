@@ -67,6 +67,15 @@ h2 { font-size: 13px; color: var(--ink-2); text-transform: uppercase;
 .dist .n { font-size: 13px; font-variant-numeric: tabular-nums; }
 .dist .track { background: none; height: 12px; }
 .dist .fill { height: 12px; border-radius: 0 4px 4px 0; min-width: 2px; }
+.deltagrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+             gap: 20px; }
+.deltahead { font-size: 13px; font-weight: 650; margin-bottom: 8px; }
+.deltahead .n { color: var(--muted); font-weight: 400; }
+.deltarow { display: flex; align-items: baseline; gap: 8px; padding: 3px 0;
+            font-size: 13px; border-bottom: 1px solid var(--grid); }
+.deltarow .sign { font-weight: 700; width: 12px; }
+.deltarow .dloc { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis;
+                  white-space: nowrap; }
 .wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th { text-align: left; color: var(--muted); font-weight: 500;
@@ -152,6 +161,7 @@ def render_dashboard(store: Store) -> str:
                 if total > 50 else "") + "</div>")
 
     hist = store.run_history()
+    diff_card = _diff_card(store, hist, run_id)
     hist_rows = "".join(
         f'<tr><td class="num">{h["id"]}</td><td>{_esc(h["started_at"])}</td>'
         f'<td>{_esc(h["label"] or "–")}</td><td class="num">{h["total"]}</td>'
@@ -167,7 +177,42 @@ def render_dashboard(store: Store) -> str:
     label = f" — {_esc(info['label'])}" if info["label"] else ""
     header = (f'<h1>QDAY <small>run {run_id}{label} · '
               f'{_esc(info["started_at"])}</small></h1>')
-    return _page(header + tiles + deadlines + dist + table + trend)
+    return _page(header + tiles + deadlines + dist + diff_card + table + trend)
+
+
+def _diff_card(store: Store, hist: list[dict], run_id: int) -> str:
+    """Movement since the previous run: what got introduced vs. retired.
+    This is the migration signal — a snapshot can't show whether you're
+    gaining or shedding vulnerable crypto."""
+    prior = [h["id"] for h in hist if h["id"] < run_id]
+    if not prior:
+        return ('<div class="card"><h2>Change since last scan</h2>'
+                '<p class="footnote">First recorded run — no prior scan to '
+                'compare against yet.</p></div>')
+    delta = store.diff_runs(prior[-1], run_id)
+    new, resolved = delta["new"], delta["resolved"]
+
+    def block(title, rows, sign, color):
+        if not rows:
+            items = '<div class="footnote">none</div>'
+        else:
+            items = "".join(
+                f'<div class="deltarow"><span class="sign" '
+                f'style="color:{color}">{sign}</span> '
+                f'<span class="chip">{_esc(r["algorithm"])}</span> '
+                f'<span class="dloc">{_esc(r["location"])}</span></div>'
+                for r in rows[:15])
+            if len(rows) > 15:
+                items += (f'<div class="footnote">+{len(rows) - 15} more</div>')
+        return (f'<div class="deltacol"><div class="deltahead">{title} '
+                f'<span class="n">({len(rows)})</span></div>{items}</div>')
+
+    return ('<div class="card"><h2>Change since last scan '
+            f'(run {prior[-1]} &rarr; {run_id})</h2>'
+            '<div class="deltagrid">'
+            + block("New / regressed", new, "&plus;", _RISK_COLOR["critical"])
+            + block("Resolved", resolved, "&minus;", _RISK_COLOR["low"])
+            + "</div></div>")
 
 
 def _esc(s) -> str:

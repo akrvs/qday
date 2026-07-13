@@ -46,6 +46,8 @@ def load_rules() -> tuple[dict[str, list[Rule]], list[Rule]]:
         if not entry.name.endswith(".yaml"):
             continue
         doc = yaml.safe_load(entry.read_text())
+        if "rules" not in doc:
+            continue  # non-rule catalog (e.g. dependencies.yaml)
         rules = [
             Rule(
                 id=r["id"],

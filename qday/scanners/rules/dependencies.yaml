@@ -1,0 +1,42 @@
+# Catalog of dependencies that ship quantum-vulnerable crypto. A manifest
+# listing one of these means the algorithm is present in the build even when
+# no first-party source line imports it — the transitive crypto the code
+# scanner can't see. `algorithm` is the family the library is flagged for;
+# most crypto libraries are multi-algorithm, so this is "worth a look", not
+# "definitely uses RSA at runtime".
+pypi:
+  cryptography: EC        # RSA/EC/DH/DSA/Ed — flag as EC (broad asym surface)
+  pycryptodome: RSA
+  pycrypto: RSA
+  rsa: RSA
+  ecdsa: ECDSA
+  paramiko: RSA           # SSH: RSA/ECDSA/Ed25519 host + user keys
+  pyopenssl: RSA
+  python-jose: RSA        # JWT: RS256/ES256 by default
+  pyjwt: RSA
+  cryptg: RSA
+npm:
+  node-rsa: RSA
+  node-forge: RSA
+  elliptic: ECDSA
+  jsrsasign: RSA
+  jsonwebtoken: RSA       # RS256/ES256
+  "@peculiar/webcrypto": RSA
+  tweetnacl: X25519       # Curve25519 (Ed25519/X25519)
+  sshpk: RSA
+go:
+  golang.org/x/crypto: EC       # ssh, ed25519, curve25519 live here
+  github.com/golang-jwt/jwt: RSA
+  github.com/dgrijalva/jwt-go: RSA
+cargo:
+  rsa: RSA
+  ecdsa: ECDSA
+  ed25519-dalek: EdDSA
+  x25519-dalek: X25519
+  p256: EC
+  p384: EC
+  openssl: RSA
+  ring: EC                # RSA/ECDSA/Ed25519/X25519
+maven:
+  org.bouncycastle: RSA         # groupId prefix match
+  com.nimbusds:nimbus-jose-jwt: RSA

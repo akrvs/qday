@@ -53,6 +53,7 @@ def load_config(path: str | Path) -> dict:
         "tls": list(scan.get("tls", [])),
         "certs": list(scan.get("certs", [])),
         "code": list(scan.get("code", [])),
+        "deps": list(scan.get("deps", [])),
         "annotations": annotations,
     }
 

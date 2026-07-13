@@ -1,6 +1,7 @@
 """Command-line entry point.
 
-    qday scan  [--tls HOST[:PORT] ...] [--certs DIR] [--code DIR]
+    qday scan  [--tls HOST[:PORT] ...] [--discover HOST|CIDR[:PORTS] ...]
+               [--certs DIR] [--code DIR] [--deps DIR]
                [--config qday.toml] [--fail-on LEVEL]
     qday report [--run ID] [--json]
     qday diff  [--from ID] [--to ID]
@@ -30,6 +31,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     tls_targets = list(args.tls or [])
     cert_dirs = [args.certs] if args.certs else []
     code_dirs = [args.code] if args.code else []
+    dep_dirs = [args.deps] if args.deps else []
     annotations: list[dict] = []
 
     config_path = args.config
@@ -44,10 +46,22 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         tls_targets += cfg["tls"]
         cert_dirs += cfg["certs"]
         code_dirs += cfg["code"]
+        dep_dirs += cfg["deps"]
         annotations = cfg["annotations"]
 
-    if not (tls_targets or cert_dirs or code_dirs):
-        print("nothing to scan: pass --tls/--certs/--code or add a "
+    discover_specs = list(args.discover or [])
+    if discover_specs:
+        from .discovery import DiscoveryError, discover
+        try:
+            live = discover(discover_specs)
+        except (DiscoveryError, ValueError) as exc:
+            print(f"discovery error: {exc}", file=sys.stderr)
+            return 2
+        print(f"discovery: {len(live)} live endpoint(s) found")
+        tls_targets += live
+
+    if not (tls_targets or cert_dirs or code_dirs or dep_dirs):
+        print("nothing to scan: pass --tls/--certs/--code/--deps or add a "
               "[scan] section to qday.toml", file=sys.stderr)
         return 2
 
@@ -71,6 +85,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         from .scanners.code import CodeScanner
         for d in code_dirs:
             assets.extend(CodeScanner(d).scan())
+    if dep_dirs:
+        from .scanners.deps import DepScanner
+        for d in dep_dirs:
+            assets.extend(DepScanner(d).scan())
 
     annotated = 0
     if annotations:
@@ -181,10 +199,15 @@ def main(argv: list[str] | None = None) -> int:
     ps = sub.add_parser("scan", help="run scanners and record a run")
     ps.add_argument("--tls", action="append", metavar="HOST[:PORT]",
                     help="scan a live TLS endpoint (repeatable)")
+    ps.add_argument("--discover", action="append", metavar="HOST|CIDR[:PORTS]",
+                    help="probe a host/CIDR + port list, scan what answers "
+                         "(e.g. 10.0.0.0/28:443,8443)")
     ps.add_argument("--certs", metavar="DIR",
                     help="scan a directory for certificate/key files")
     ps.add_argument("--code", metavar="DIR",
                     help="scan a source tree for crypto usage")
+    ps.add_argument("--deps", metavar="DIR",
+                    help="scan dependency manifests for crypto libraries")
     ps.add_argument("--label", help="label for this run")
     ps.add_argument("--config", metavar="TOML",
                     help="scan config (default: qday.toml if present)")
