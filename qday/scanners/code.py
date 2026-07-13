@@ -40,7 +40,7 @@ def load_rules() -> tuple[dict[str, list[Rule]], list[Rule]]:
     """Return (rules by file extension, generic rules for all files)."""
     by_ext: dict[str, list[Rule]] = {}
     generic: list[Rule] = []
-    rule_dir = resources.files("cryptomap.scanners") / "rules"
+    rule_dir = resources.files("qday.scanners") / "rules"
     for entry in sorted(rule_dir.iterdir(), key=lambda e: e.name):
         if not entry.name.endswith(".yaml"):
             continue

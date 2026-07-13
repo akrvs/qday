@@ -1,5 +1,5 @@
 """Tiny stdlib HTTP server for the dashboard. Re-reads the store on every
-request, so a fresh `cryptomap scan` shows up on reload — that's the whole
+request, so a fresh `qday scan` shows up on reload — that's the whole
 "continuous" loop for the MVP: cron the scan, keep the page open."""
 
 from __future__ import annotations

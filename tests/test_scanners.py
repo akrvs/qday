@@ -5,9 +5,9 @@ import threading
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cryptomap.model import AssetType
-from cryptomap.scanners.certs import CertFileScanner
-from cryptomap.scanners.tls import TlsScanner
+from qday.model import AssetType
+from qday.scanners.certs import CertFileScanner
+from qday.scanners.tls import TlsScanner
 
 from .conftest import make_self_signed
 

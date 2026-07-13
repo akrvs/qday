@@ -1,7 +1,7 @@
-from cryptomap.cbom import export_cbom
-from cryptomap.risk import score_asset
-from cryptomap.scanners.certs import CertFileScanner
-from cryptomap.store import Store
+from qday.cbom import export_cbom
+from qday.risk import score_asset
+from qday.scanners.certs import CertFileScanner
+from qday.store import Store
 
 
 def test_cbom_from_real_scan(cert_dir, tmp_path):
@@ -27,5 +27,5 @@ def test_cbom_from_real_scan(cert_dir, tmp_path):
                 if c["cryptoProperties"]["assetType"] == "certificate")
     assert cert["cryptoProperties"]["certificateProperties"]["issuerName"]
     props = {p["name"]: p["value"] for p in cert["properties"]}
-    assert props["cryptomap:quantum_vulnerable"] == "true"
-    assert float(props["cryptomap:risk_score"]) > 0
+    assert props["qday:quantum_vulnerable"] == "true"
+    assert float(props["qday:risk_score"]) > 0

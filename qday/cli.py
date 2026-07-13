@@ -1,9 +1,9 @@
 """Command-line entry point.
 
-    cryptomap scan  [--tls HOST[:PORT] ...] [--certs DIR] [--code DIR]
-    cryptomap report [--run ID] [--json]
-    cryptomap export [--run ID] -o cbom.json
-    cryptomap serve  [--port 8080]
+    qday scan  [--tls HOST[:PORT] ...] [--certs DIR] [--code DIR]
+    qday report [--run ID] [--json]
+    qday export [--run ID] -o cbom.json
+    qday serve  [--port 8080]
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 from .model import CryptoAsset
 from .store import Store
 
-DEFAULT_DB = "data/cryptomap.db"
+DEFAULT_DB = "data/qday.db"
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -53,7 +53,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
     store = Store(args.db)
     run_id = args.run or store.latest_run_id()
     if run_id is None:
-        print("no scan runs recorded yet — run `cryptomap scan` first",
+        print("no scan runs recorded yet — run `qday scan` first",
               file=sys.stderr)
         return 1
     rows = store.assets_for_run(run_id)
@@ -105,7 +105,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="cryptomap", description=__doc__)
+    p = argparse.ArgumentParser(prog="qday", description=__doc__)
     p.add_argument("--db", default=DEFAULT_DB, help="sqlite database path")
     sub = p.add_subparsers(dest="command", required=True)
 

@@ -1,5 +1,5 @@
-from cryptomap.model import AssetType, CryptoAsset, Exposure
-from cryptomap.risk import score_asset
+from qday.model import AssetType, CryptoAsset, Exposure
+from qday.risk import score_asset
 
 
 def asset(**kw):

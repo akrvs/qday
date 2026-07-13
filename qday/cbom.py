@@ -43,10 +43,10 @@ def export_cbom(rows: list[dict], run_info: dict | None) -> dict:
             "timestamp": datetime.now(timezone.utc)
                 .isoformat(timespec="seconds"),
             "tools": {"components": [{
-                "type": "application", "name": "cryptomap",
+                "type": "application", "name": "qday",
                 "version": __version__,
             }]},
-            "properties": ([{"name": "cryptomap:run_label",
+            "properties": ([{"name": "qday:run_label",
                              "value": run_info["label"]}]
                            if run_info and run_info.get("label") else []),
         },
@@ -93,15 +93,15 @@ def _component(row: dict) -> dict:
         "evidence": {"occurrences": [{"location": row["location"]}]},
         "cryptoProperties": crypto_props,
         "properties": [
-            {"name": "cryptomap:algorithm_family", "value": row["algorithm"]},
-            {"name": "cryptomap:quantum_vulnerable",
+            {"name": "qday:algorithm_family", "value": row["algorithm"]},
+            {"name": "qday:quantum_vulnerable",
              "value": str(bool(row["quantum_vulnerable"])).lower()},
-            {"name": "cryptomap:risk_score",
+            {"name": "qday:risk_score",
              "value": str(row.get("risk_score"))},
-            {"name": "cryptomap:risk_level",
+            {"name": "qday:risk_level",
              "value": str(row.get("risk_level"))},
-            {"name": "cryptomap:exposure", "value": row["exposure"]},
-            {"name": "cryptomap:data_lifespan_years",
+            {"name": "qday:exposure", "value": row["exposure"]},
+            {"name": "qday:data_lifespan_years",
              "value": str(row["data_lifespan_years"])},
         ],
     }

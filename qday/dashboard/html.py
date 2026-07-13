@@ -82,7 +82,7 @@ td.num { font-variant-numeric: tabular-nums; }
 def render_dashboard(store: Store) -> str:
     run_id = store.latest_run_id()
     if run_id is None:
-        return _page("<p>No scan runs yet. Run <code>cryptomap scan</code>.</p>")
+        return _page("<p>No scan runs yet. Run <code>qday scan</code>.</p>")
 
     info = store.run_info(run_id)
     rows = store.assets_for_run(run_id)
@@ -165,7 +165,7 @@ def render_dashboard(store: Store) -> str:
              + hist_rows + "</table></div></div>")
 
     label = f" — {_esc(info['label'])}" if info["label"] else ""
-    header = (f'<h1>CryptoMap <small>run {run_id}{label} · '
+    header = (f'<h1>QDAY <small>run {run_id}{label} · '
               f'{_esc(info["started_at"])}</small></h1>')
     return _page(header + tiles + deadlines + dist + table + trend)
 
@@ -177,5 +177,5 @@ def _esc(s) -> str:
 def _page(body: str) -> str:
     return (f"<!doctype html><html><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
-            f"<title>CryptoMap dashboard</title><style>{_CSS}</style></head>"
+            f"<title>QDAY dashboard</title><style>{_CSS}</style></head>"
             f"<body>{body}</body></html>")

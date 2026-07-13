@@ -1,5 +1,5 @@
-from cryptomap.model import AssetType, CryptoAsset, Exposure, canonical_family
-from cryptomap.store import Store
+from qday.model import AssetType, CryptoAsset, Exposure, canonical_family
+from qday.store import Store
 
 
 def make_asset(**kw) -> CryptoAsset:

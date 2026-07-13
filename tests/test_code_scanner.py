@@ -2,7 +2,7 @@ import textwrap
 
 import pytest
 
-from cryptomap.scanners.code import CodeScanner, load_rules
+from qday.scanners.code import CodeScanner, load_rules
 
 
 @pytest.fixture
