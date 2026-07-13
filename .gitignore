@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+
+# Local data (scan results, sqlite history)
+data/
+*.sqlite3
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
