@@ -1,7 +1,9 @@
 """Command-line entry point.
 
     qday scan  [--tls HOST[:PORT] ...] [--certs DIR] [--code DIR]
+               [--config qday.toml] [--fail-on LEVEL]
     qday report [--run ID] [--json]
+    qday diff  [--from ID] [--to ID]
     qday export [--run ID] -o cbom.json
     qday serve  [--port 8080]
 """
@@ -10,33 +12,70 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 from .model import CryptoAsset
 from .store import Store
 
 DEFAULT_DB = "data/qday.db"
 
+_LEVEL_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+
 
 def _cmd_scan(args: argparse.Namespace) -> int:
-    assets: list[CryptoAsset] = []
+    from .config import DEFAULT_CONFIG, ConfigError, load_config
 
-    if args.tls:
-        from .scanners.tls import TlsScanner
-        for target in args.tls:
-            host, _, port = target.partition(":")
-            assets.extend(TlsScanner(host, int(port or 443)).scan())
-    if args.certs:
-        from .scanners.certs import CertFileScanner
-        assets.extend(CertFileScanner(args.certs).scan())
-    if args.code:
-        from .scanners.code import CodeScanner
-        assets.extend(CodeScanner(args.code).scan())
+    tls_targets = list(args.tls or [])
+    cert_dirs = [args.certs] if args.certs else []
+    code_dirs = [args.code] if args.code else []
+    annotations: list[dict] = []
 
-    if not (args.tls or args.certs or args.code):
-        print("nothing to scan: pass --tls, --certs and/or --code",
-              file=sys.stderr)
+    config_path = args.config
+    if config_path is None and os.path.exists(DEFAULT_CONFIG):
+        config_path = DEFAULT_CONFIG
+    if config_path:
+        try:
+            cfg = load_config(config_path)
+        except (OSError, ConfigError) as exc:
+            print(f"config error: {exc}", file=sys.stderr)
+            return 2
+        tls_targets += cfg["tls"]
+        cert_dirs += cfg["certs"]
+        code_dirs += cfg["code"]
+        annotations = cfg["annotations"]
+
+    if not (tls_targets or cert_dirs or code_dirs):
+        print("nothing to scan: pass --tls/--certs/--code or add a "
+              "[scan] section to qday.toml", file=sys.stderr)
         return 2
+
+    assets: list[CryptoAsset] = []
+    if tls_targets:
+        from .scanners.tls import TlsScanner
+
+        def scan_one(target: str) -> list[CryptoAsset]:
+            host, _, port = target.partition(":")
+            return list(TlsScanner(host, int(port or 443)).scan())
+
+        # Handshakes are network-bound; a pool turns N × timeout into ~timeout.
+        with ThreadPoolExecutor(max_workers=min(16, len(tls_targets))) as pool:
+            for result in pool.map(scan_one, tls_targets):
+                assets.extend(result)
+    if cert_dirs:
+        from .scanners.certs import CertFileScanner
+        for d in cert_dirs:
+            assets.extend(CertFileScanner(d).scan())
+    if code_dirs:
+        from .scanners.code import CodeScanner
+        for d in code_dirs:
+            assets.extend(CodeScanner(d).scan())
+
+    annotated = 0
+    if annotations:
+        from .config import apply_annotations
+        annotated = apply_annotations(assets, annotations)
 
     from .risk import score_asset
     scores = {a.asset_id: score_asset(a) for a in assets}
@@ -44,8 +83,38 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     store = Store(args.db)
     run_id = store.save_run(assets, scores, label=args.label)
     vulnerable = sum(1 for a in assets if a.quantum_vulnerable)
+    note = f", {annotated} annotated via config" if annotated else ""
     print(f"run {run_id}: {len(assets)} crypto assets found, "
-          f"{vulnerable} quantum-vulnerable  (db: {args.db})")
+          f"{vulnerable} quantum-vulnerable{note}  (db: {args.db})")
+
+    if args.fail_on:
+        threshold = _LEVEL_RANK[args.fail_on]
+        worst = max((_LEVEL_RANK.get(level, 0)
+                     for _, level in scores.values()), default=0)
+        if worst >= threshold:
+            print(f"fail-on={args.fail_on}: threshold met (exit 3)",
+                  file=sys.stderr)
+            return 3
+    return 0
+
+
+def _cmd_diff(args: argparse.Namespace) -> int:
+    store = Store(args.db)
+    history = store.run_history()
+    if len(history) < 2 and not (args.from_run and args.to_run):
+        print("need at least two runs to diff", file=sys.stderr)
+        return 1
+    from_id = args.from_run or history[-2]["id"]
+    to_id = args.to_run or history[-1]["id"]
+    delta = store.diff_runs(from_id, to_id)
+
+    print(f"run {from_id} -> run {to_id}: "
+          f"+{len(delta['new'])} new, -{len(delta['resolved'])} resolved, "
+          f"{len(delta['persisting'])} persisting")
+    for tag, rows in (("+", delta["new"]), ("-", delta["resolved"])):
+        for r in rows:
+            print(f"  {tag} [{r['risk_level'] or '-'}] {r['algorithm']:<8} "
+                  f"{r['asset_type']:<14} {r['location']}")
     return 0
 
 
@@ -117,7 +186,17 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--code", metavar="DIR",
                     help="scan a source tree for crypto usage")
     ps.add_argument("--label", help="label for this run")
+    ps.add_argument("--config", metavar="TOML",
+                    help="scan config (default: qday.toml if present)")
+    ps.add_argument("--fail-on", choices=list(_LEVEL_RANK),
+                    help="exit 3 if any asset reaches this risk level "
+                         "(CI gate)")
     ps.set_defaults(fn=_cmd_scan)
+
+    pd = sub.add_parser("diff", help="compare two runs (default: last two)")
+    pd.add_argument("--from", dest="from_run", type=int, metavar="ID")
+    pd.add_argument("--to", dest="to_run", type=int, metavar="ID")
+    pd.set_defaults(fn=_cmd_diff)
 
     pr = sub.add_parser("report", help="print inventory for a run")
     pr.add_argument("--run", type=int, help="run id (default: latest)")

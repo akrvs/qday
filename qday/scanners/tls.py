@@ -42,6 +42,7 @@ class TlsScanner:
                     version = tls.version()
                     cipher = tls.cipher()  # (name, protocol, secret_bits)
                     der = tls.getpeercert(binary_form=True)
+                    chain_der = _peer_chain(tls)
         except (OSError, ssl.SSLError) as exc:
             yield CryptoAsset(
                 name=f"unreachable endpoint {location}",
@@ -69,22 +70,44 @@ class TlsScanner:
             },
         )
 
-        if der:
-            cert = x509.load_der_x509_certificate(der)
+        # Whole served chain: a PQC-migrated leaf under an RSA intermediate
+        # is still a quantum-vulnerable trust path, so intermediates count.
+        chain = chain_der if chain_der else ([der] if der else [])
+        for position, cert_der in enumerate(chain):
+            cert = x509.load_der_x509_certificate(cert_der)
             family, bits, curve = classify_key(cert.public_key())
             not_after = cert.not_valid_after_utc
+            role = "leaf" if position == 0 else (
+                "root" if position == len(chain) - 1 and len(chain) > 1
+                else "intermediate")
             yield CryptoAsset(
                 name=cert.subject.rfc4514_string() or location,
                 asset_type=AssetType.CERTIFICATE,
                 algorithm=family, key_size=bits, curve=curve,
                 location=location, scanner=self.name, exposure=self.exposure,
                 details={
+                    "chain_role": role,
                     "issuer": cert.issuer.rfc4514_string(),
                     "not_after": not_after.isoformat(),
                     "expired": not_after < datetime.now(timezone.utc),
                     "signature_algorithm": cert.signature_algorithm_oid._name,
                 },
             )
+
+
+def _peer_chain(tls: ssl.SSLSocket) -> list[bytes]:
+    """Full served chain as DER blobs, leaf first (Python 3.13+; empty list
+    on older runtimes, where the caller falls back to the leaf only)."""
+    getter = getattr(tls, "get_unverified_chain", None)
+    if getter is None:
+        return []
+    try:
+        chain = getter() or []
+    except ssl.SSLError:
+        return []
+    return [c if isinstance(c, bytes)
+            else ssl.PEM_cert_to_DER_cert(c.public_bytes())
+            for c in chain]
 
 
 def _key_exchange_family(cipher_name: str, version: str | None) -> str:

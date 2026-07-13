@@ -87,6 +87,17 @@ class Store:
             "ORDER BY risk_score DESC, algorithm", (run_id,)).fetchall()
         return [dict(r) for r in rows]
 
+    def diff_runs(self, from_id: int, to_id: int) -> dict[str, list[dict]]:
+        """Assets that appeared, disappeared, or persisted between two runs,
+        keyed by the stable asset_id."""
+        old = {r["asset_id"]: r for r in self.assets_for_run(from_id)}
+        new = {r["asset_id"]: r for r in self.assets_for_run(to_id)}
+        return {
+            "new": [r for aid, r in new.items() if aid not in old],
+            "resolved": [r for aid, r in old.items() if aid not in new],
+            "persisting": [r for aid, r in new.items() if aid in old],
+        }
+
     def run_history(self) -> list[dict]:
         """Per-run summary for trend lines: total assets, vulnerable count."""
         rows = self._con.execute(

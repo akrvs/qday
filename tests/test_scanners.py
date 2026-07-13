@@ -66,6 +66,7 @@ def test_tls_scanner_against_local_server(tmp_path):
     served = by_type[AssetType.CERTIFICATE]
     assert served.algorithm == "RSA" and served.key_size == 2048
     assert "localhost" in served.name
+    assert served.details["chain_role"] == "leaf"
 
 
 def test_tls_scanner_unreachable():
