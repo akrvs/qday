@@ -1,0 +1,25 @@
+language: java
+file_extensions: [".java", ".kt", ".scala"]
+rules:
+  - id: java-keypairgen-rsa
+    pattern: 'KeyPairGenerator\.getInstance\s*\(\s*"RSA'
+    algorithm: RSA
+    key_size_pattern: '\.initialize\s*\(\s*(\d+)'
+  - id: java-keypairgen-ec
+    pattern: 'KeyPairGenerator\.getInstance\s*\(\s*"EC'
+    algorithm: EC
+  - id: java-keypairgen-dsa
+    pattern: 'KeyPairGenerator\.getInstance\s*\(\s*"DSA'
+    algorithm: DSA
+  - id: java-keyagreement-dh
+    pattern: 'KeyAgreement\.getInstance\s*\(\s*"(EC)?DH'
+    algorithm: DH
+  - id: java-signature-ecdsa
+    pattern: 'Signature\.getInstance\s*\(\s*"[A-Za-z0-9]*withECDSA'
+    algorithm: ECDSA
+  - id: java-signature-rsa
+    pattern: 'Signature\.getInstance\s*\(\s*"[A-Za-z0-9]*withRSA'
+    algorithm: RSA
+  - id: java-cipher-rsa
+    pattern: 'Cipher\.getInstance\s*\(\s*"RSA'
+    algorithm: RSA

@@ -1,0 +1,33 @@
+# Language-independent patterns: embedded key material and crypto config.
+# These fire on any text file, which is where committed keys actually hide.
+language: generic
+file_extensions: ["*"]
+rules:
+  - id: generic-embedded-rsa-key
+    pattern: '-----BEGIN RSA PRIVATE KEY-----'
+    algorithm: RSA
+    note: private key committed to the repository
+  - id: generic-embedded-ec-key
+    pattern: '-----BEGIN EC PRIVATE KEY-----'
+    algorithm: EC
+    note: private key committed to the repository
+  - id: generic-embedded-private-key
+    pattern: '-----BEGIN (ENCRYPTED )?PRIVATE KEY-----'
+    algorithm: UNKNOWN
+    note: PKCS#8 private key committed to the repository
+  - id: generic-ssh-rsa-pubkey
+    pattern: '\bssh-rsa\s+AAAA'
+    algorithm: RSA
+  - id: generic-ssh-ecdsa-pubkey
+    pattern: '\becdsa-sha2-nistp(256|384|521)\s+AAAA'
+    algorithm: ECDSA
+  - id: generic-ssh-ed25519-pubkey
+    pattern: '\bssh-ed25519\s+AAAA'
+    algorithm: EdDSA
+  - id: generic-openssl-genrsa
+    pattern: '\bopenssl\s+genrsa\b'
+    algorithm: RSA
+    key_size_pattern: 'genrsa\b.*?(\d{3,5})\s*$'
+  - id: generic-openssl-ecparam
+    pattern: '\bopenssl\s+ecparam\b'
+    algorithm: EC
