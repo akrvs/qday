@@ -34,6 +34,7 @@ class Rule:
     key_size_pattern: re.Pattern | None
     note: str | None
     language: str
+    keywords: tuple[str, ...]  # lowercase literals; any-of gates the regex
 
 
 def load_rules() -> tuple[dict[str, list[Rule]], list[Rule]]:
@@ -54,6 +55,8 @@ def load_rules() -> tuple[dict[str, list[Rule]], list[Rule]]:
                                   if r.get("key_size_pattern") else None),
                 note=r.get("note"),
                 language=doc["language"],
+                keywords=tuple(r["keywords"]),  # required: no keywords means
+                                                # the rule would never fire
             )
             for r in doc["rules"]
         ]
@@ -79,13 +82,19 @@ class CodeScanner:
             if path.stat().st_size > _MAX_FILE_BYTES:
                 continue
             rules = self._by_ext.get(path.suffix.lower(), []) + self._generic
-            if not rules:
-                continue
             try:
-                lines = path.read_text(errors="ignore").splitlines()
+                text = path.read_text(errors="ignore")
             except OSError:
                 continue
-            yield from self._scan_lines(path, lines, rules)
+            # Keyword prescreen: str.find runs at C speed, so files with no
+            # crypto tell-tales (almost all of them) never reach the regex
+            # engine or the per-line loop.
+            low = text.lower()
+            active = [r for r in rules
+                      if any(k in low for k in r.keywords)]
+            if not active:
+                continue
+            yield from self._scan_lines(path, text.splitlines(), active)
 
     def _scan_lines(self, path: Path, lines: list[str],
                     rules: list[Rule]) -> Iterator[CryptoAsset]:

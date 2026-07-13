@@ -1,33 +1,52 @@
 language: python
-file_extensions: [".py"]
+file_extensions:
+- .py
 rules:
-  - id: py-rsa-keygen
-    pattern: 'rsa\.generate_private_key\s*\('
-    algorithm: RSA
-    key_size_pattern: 'key_size\s*=\s*(\d+)'
-  - id: py-pycrypto-rsa
-    pattern: 'RSA\.generate\s*\('
-    algorithm: RSA
-    key_size_pattern: 'RSA\.generate\s*\(\s*(\d+)'
-  - id: py-ec-keygen
-    pattern: 'ec\.generate_private_key\s*\('
-    algorithm: EC
-  - id: py-ecdsa-import
-    pattern: '\becdsa\b.*import|import\s+ecdsa\b'
-    algorithm: ECDSA
-  - id: py-dsa-keygen
-    pattern: 'dsa\.generate_private_key\s*\('
-    algorithm: DSA
-  - id: py-dh-params
-    pattern: 'dh\.generate_parameters\s*\('
-    algorithm: DH
-    key_size_pattern: 'key_size\s*=\s*(\d+)'
-  - id: py-ed25519
-    pattern: 'ed25519\.Ed25519PrivateKey\.generate'
-    algorithm: EdDSA
-  - id: py-x25519
-    pattern: 'x25519\.X25519PrivateKey\.generate'
-    algorithm: X25519
-  - id: py-paramiko-rsa
-    pattern: 'paramiko\.RSAKey'
-    algorithm: RSA
+- id: py-rsa-keygen
+  pattern: rsa\.generate_private_key\s*\(
+  algorithm: RSA
+  key_size_pattern: key_size\s*=\s*(\d+)
+  keywords:
+  - rsa.generate_private_key
+- id: py-pycrypto-rsa
+  pattern: RSA\.generate\s*\(
+  algorithm: RSA
+  key_size_pattern: RSA\.generate\s*\(\s*(\d+)
+  keywords:
+  - rsa.generate
+- id: py-ec-keygen
+  pattern: ec\.generate_private_key\s*\(
+  algorithm: EC
+  keywords:
+  - ec.generate_private_key
+- id: py-ecdsa-import
+  pattern: \becdsa\b.*import|import\s+ecdsa\b
+  algorithm: ECDSA
+  keywords:
+  - ecdsa
+- id: py-dsa-keygen
+  pattern: dsa\.generate_private_key\s*\(
+  algorithm: DSA
+  keywords:
+  - dsa.generate_private_key
+- id: py-dh-params
+  pattern: dh\.generate_parameters\s*\(
+  algorithm: DH
+  key_size_pattern: key_size\s*=\s*(\d+)
+  keywords:
+  - dh.generate_parameters
+- id: py-ed25519
+  pattern: ed25519\.Ed25519PrivateKey\.generate
+  algorithm: EdDSA
+  keywords:
+  - ed25519
+- id: py-x25519
+  pattern: x25519\.X25519PrivateKey\.generate
+  algorithm: X25519
+  keywords:
+  - x25519
+- id: py-paramiko-rsa
+  pattern: paramiko\.RSAKey
+  algorithm: RSA
+  keywords:
+  - paramiko.rsakey

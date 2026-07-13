@@ -1,22 +1,35 @@
 language: go
-file_extensions: [".go"]
+file_extensions:
+- .go
 rules:
-  - id: go-rsa-generate
-    pattern: 'rsa\.GenerateKey\s*\('
-    algorithm: RSA
-    key_size_pattern: 'rsa\.GenerateKey\s*\([^,]+,\s*(\d+)'
-  - id: go-ecdsa-generate
-    pattern: 'ecdsa\.GenerateKey\s*\('
-    algorithm: ECDSA
-  - id: go-elliptic-curve
-    pattern: 'elliptic\.P(224|256|384|521)\s*\('
-    algorithm: EC
-  - id: go-ed25519
-    pattern: 'ed25519\.GenerateKey\s*\('
-    algorithm: EdDSA
-  - id: go-x25519
-    pattern: 'curve25519\.(ScalarBaseMult|X25519)'
-    algorithm: X25519
-  - id: go-dsa
-    pattern: 'dsa\.GenerateKey\s*\('
-    algorithm: DSA
+- id: go-rsa-generate
+  pattern: rsa\.GenerateKey\s*\(
+  algorithm: RSA
+  key_size_pattern: rsa\.GenerateKey\s*\([^,]+,\s*(\d+)
+  keywords:
+  - rsa.generatekey
+- id: go-ecdsa-generate
+  pattern: ecdsa\.GenerateKey\s*\(
+  algorithm: ECDSA
+  keywords:
+  - ecdsa.generatekey
+- id: go-elliptic-curve
+  pattern: elliptic\.P(224|256|384|521)\s*\(
+  algorithm: EC
+  keywords:
+  - elliptic.p
+- id: go-ed25519
+  pattern: ed25519\.GenerateKey\s*\(
+  algorithm: EdDSA
+  keywords:
+  - ed25519.generatekey
+- id: go-x25519
+  pattern: curve25519\.(ScalarBaseMult|X25519)
+  algorithm: X25519
+  keywords:
+  - curve25519
+- id: go-dsa
+  pattern: dsa\.GenerateKey\s*\(
+  algorithm: DSA
+  keywords:
+  - dsa.generatekey

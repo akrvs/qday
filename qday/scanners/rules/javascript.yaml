@@ -1,27 +1,48 @@
 language: javascript
-file_extensions: [".js", ".ts", ".mjs", ".cjs"]
+file_extensions:
+- .js
+- .ts
+- .mjs
+- .cjs
 rules:
-  - id: js-node-rsa-keypair
-    pattern: 'generateKeyPair(Sync)?\s*\(\s*[''"]rsa'
-    algorithm: RSA
-    key_size_pattern: 'modulusLength\s*:\s*(\d+)'
-  - id: js-node-ec-keypair
-    pattern: 'generateKeyPair(Sync)?\s*\(\s*[''"]ec[''"]'
-    algorithm: EC
-  - id: js-node-ed25519
-    pattern: 'generateKeyPair(Sync)?\s*\(\s*[''"]ed25519'
-    algorithm: EdDSA
-  - id: js-node-dh
-    pattern: 'createDiffieHellman\s*\('
-    algorithm: DH
-    key_size_pattern: 'createDiffieHellman\s*\(\s*(\d+)'
-  - id: js-node-ecdh
-    pattern: 'createECDH\s*\('
-    algorithm: ECDH
-  - id: js-webcrypto-rsa
-    pattern: 'name\s*:\s*[''"]RSA-(OAEP|PSS)|[''"]RSASSA-PKCS1'
-    algorithm: RSA
-    key_size_pattern: 'modulusLength\s*:\s*(\d+)'
-  - id: js-webcrypto-ecdsa
-    pattern: 'name\s*:\s*[''"]ECD(SA|H)[''"]'
-    algorithm: ECDSA
+- id: js-node-rsa-keypair
+  pattern: generateKeyPair(Sync)?\s*\(\s*['"]rsa
+  algorithm: RSA
+  key_size_pattern: modulusLength\s*:\s*(\d+)
+  keywords:
+  - generatekeypair
+- id: js-node-ec-keypair
+  pattern: generateKeyPair(Sync)?\s*\(\s*['"]ec['"]
+  algorithm: EC
+  keywords:
+  - generatekeypair
+- id: js-node-ed25519
+  pattern: generateKeyPair(Sync)?\s*\(\s*['"]ed25519
+  algorithm: EdDSA
+  keywords:
+  - generatekeypair
+- id: js-node-dh
+  pattern: createDiffieHellman\s*\(
+  algorithm: DH
+  key_size_pattern: createDiffieHellman\s*\(\s*(\d+)
+  keywords:
+  - creatediffiehellman
+- id: js-node-ecdh
+  pattern: createECDH\s*\(
+  algorithm: ECDH
+  keywords:
+  - createecdh
+- id: js-webcrypto-rsa
+  pattern: name\s*:\s*['"]RSA-(OAEP|PSS)|['"]RSASSA-PKCS1
+  algorithm: RSA
+  key_size_pattern: modulusLength\s*:\s*(\d+)
+  keywords:
+  - rsa-oaep
+  - rsa-pss
+  - rsassa-pkcs1
+- id: js-webcrypto-ecdsa
+  pattern: name\s*:\s*['"]ECD(SA|H)['"]
+  algorithm: ECDSA
+  keywords:
+  - ecdsa
+  - ecdh
