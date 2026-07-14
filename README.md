@@ -18,7 +18,7 @@
 ![category](https://img.shields.io/badge/category-Security%20%2F%20PQC-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Hard-red)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-26%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-43%20passing-brightgreen)
 ![deps](https://img.shields.io/badge/runtime%20deps-2-brightgreen)
 
 ```
@@ -60,6 +60,7 @@ code       crypto API calls with key sizes across Python / Java / Kotlin /
 deps       crypto libraries in dependency manifests — the transitive crypto
            first-party source never imports directly
 discover   probe a host/CIDR + port list, TLS-scan whatever answers
+agility    your own crypto-agility policy bindings (purpose -> suite)
 ```
 
 | Scanner | Ground truth level | Lie detector |
@@ -68,6 +69,7 @@ discover   probe a host/CIDR + port list, TLS-scan whatever answers
 | `--certs` | **Artifact on disk**   | what's deployed and what's leaked into repos |
 | `--code`  | **Heuristic**          | breadth over depth — `file:line` evidence for humans to triage, not CodeQL |
 | `--deps`  | **Manifest**           | requirements.txt · package-lock.json · go.mod · Cargo.lock · pom.xml → known crypto libraries |
+| `--agility` | **Policy**           | your own crypto-agility bindings (see [ Agility ]) — dogfooding the migration layer |
 
 Rules and the dependency catalog are data, not code:
 `qday/scanners/rules/*.yaml` — add a pattern or a package, gain coverage.
@@ -137,6 +139,43 @@ exposure       = "public"
 - **Exposure**: public ×1.25 · internal ×1.0 · local ×0.85. Expired certs get
   a bump — unmanaged crypto migrates last.
 
+## [ Agility ] — migrate without a rewrite
+
+Discovery is half the job; the other half is being able to *act* on it. The
+`qday.agility` library binds algorithm choice to config, so the eventual PQC
+swap is a one-line edit — not a code change threaded through every call site.
+
+```python
+from qday.agility import CryptoPolicy
+
+policy = CryptoPolicy.from_file("agility.toml")
+priv, pub = policy.generate("firmware-signing")   # uses the CURRENT binding
+sig = policy.sign(priv, firmware_bytes)           # dispatches on the key
+assert policy.verify(pub, firmware_bytes, sig)
+```
+
+Application code names a **purpose**; the policy binds it to a **suite**. The
+algorithm identity rides *with the key* (like a JOSE `alg` header), so `verify`
+auto-routes and RSA and ML-DSA keys coexist during the transition.
+
+```toml
+[agility.purposes]
+document-signing = "rsa-3072"
+firmware-signing = "hybrid:ecdsa-p384+ml-dsa-65"   # CNSA 2.0-style hybrid
+
+[agility.policy]
+deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
+```
+
+- **Providers** are pluggable: RSA, ECDSA (P-256/384/521), Ed25519/Ed448 ship
+  real (via `cryptography`); ML-DSA (FIPS 204) is wired through the optional
+  `oqs` backend — `pip install oqs` activates it with zero code change.
+- **Hybrids** sign with both arms and require both to verify, so the signature
+  is no weaker than its stronger arm.
+- **Dogfooded**: `qday scan --agility agility.toml` inventories the policy
+  itself, so a purpose still bound to vulnerable crypto shows up on the same
+  dashboard as everything else.
+
 ## [ Intel ] — the clock
 
 ```
@@ -152,5 +191,5 @@ exposure       = "public"
 - [x] Run-to-run diff (CLI + dashboard panel) + `--fail-on` CI gate
 - [x] Port-range / subnet endpoint discovery (`--discover`)
 - [x] Dependency-manifest scanning (pypi · npm · go · cargo · maven)
-- [ ] Crypto-agility layer: algorithm choice behind config, so the eventual
-      PQC swap is a config change, not a code rewrite
+- [x] Crypto-agility layer: purpose-based policy, hybrid PQC, config-only swap
+- [ ] ML-KEM key-encapsulation suites (signatures land first; KEM next)
