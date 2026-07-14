@@ -18,7 +18,7 @@
 ![category](https://img.shields.io/badge/category-Security%20%2F%20PQC-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Hard-red)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-19%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-26%20passing-brightgreen)
 ![deps](https://img.shields.io/badge/runtime%20deps-2-brightgreen)
 
 ```
@@ -57,16 +57,20 @@ certs      X.509 certs and key material on disk: PEM/DER/OpenSSH,
            public + private keys, encrypted-key detection
 code       crypto API calls with key sizes across Python / Java / Kotlin /
            Go / JS / TS, embedded private keys, openssl calls in scripts
+deps       crypto libraries in dependency manifests — the transitive crypto
+           first-party source never imports directly
+discover   probe a host/CIDR + port list, TLS-scan whatever answers
 ```
 
 | Scanner | Ground truth level | Lie detector |
 |---|---|---|
-| `--tls`   | **Negotiated reality** | what the endpoint actually serves, verification off — expired and self-signed included |
+| `--tls` / `--discover` | **Negotiated reality** | what the endpoint actually serves (full chain: leaf/intermediate/root), verification off — expired and self-signed included |
 | `--certs` | **Artifact on disk**   | what's deployed and what's leaked into repos |
 | `--code`  | **Heuristic**          | breadth over depth — `file:line` evidence for humans to triage, not CodeQL |
+| `--deps`  | **Manifest**           | requirements.txt · package-lock.json · go.mod · Cargo.lock · pom.xml → known crypto libraries |
 
-Code rules are data, not code: `qday/scanners/rules/*.yaml` — add a pattern,
-gain a language.
+Rules and the dependency catalog are data, not code:
+`qday/scanners/rules/*.yaml` — add a pattern or a package, gain coverage.
 
 ## [ Loadout ] — install
 
@@ -82,10 +86,14 @@ the dashboard runs air-gapped.
 ```sh
 # Scan any mix of targets; each scan appends a run.
 # TLS endpoints scan in parallel and inventory the full served chain.
-qday scan --tls api.example.com:443 --certs /etc/ssl --code ~/repos/backend
+qday scan --tls api.example.com:443 --certs /etc/ssl \
+          --code ~/repos/backend --deps ~/repos/backend
+
+# Discover what's actually listening, then TLS-scan the live ones
+qday scan --discover 10.0.0.0/28:443,8443
 
 # CI gate: exit 3 the moment anything reaches the threshold
-qday scan --code . --fail-on critical
+qday scan --code . --deps . --fail-on critical
 
 # Inventory for the latest run, ranked by risk (--json for machines)
 qday report
@@ -108,6 +116,7 @@ where the humans feed the risk model what no scanner can discover:
 tls   = ["api.example.com:443", "vpn.example.com:8443"]
 certs = ["/etc/ssl"]
 code  = ["../backend"]
+deps  = ["../backend"]
 
 [[annotate]]
 match          = "api.example.com*"   # fnmatch against asset location
@@ -140,8 +149,8 @@ exposure       = "public"
 
 - [x] Full certificate chain capture (leaf / intermediate / root roles)
 - [x] Lifespan/exposure annotations via `qday.toml`
-- [x] Run-to-run diff + `--fail-on` CI gate
-- [ ] Port-range / subnet endpoint discovery
-- [ ] Dependency-manifest scanning (lockfiles → known crypto libraries)
+- [x] Run-to-run diff (CLI + dashboard panel) + `--fail-on` CI gate
+- [x] Port-range / subnet endpoint discovery (`--discover`)
+- [x] Dependency-manifest scanning (pypi · npm · go · cargo · maven)
 - [ ] Crypto-agility layer: algorithm choice behind config, so the eventual
       PQC swap is a config change, not a code rewrite
