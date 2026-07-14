@@ -1,0 +1,28 @@
+# Example crypto-agility policy.
+#
+# Application code names a PURPOSE; this file binds it to a SUITE. Migrating a
+# purpose to post-quantum crypto is editing one line here — the code that calls
+# policy.sign(key, data) never changes, and keys already issued keep verifying
+# because their provider stays registered.
+#
+#   from qday.agility import CryptoPolicy
+#   policy = CryptoPolicy.from_file("agility.toml")
+#   priv, pub = policy.generate("firmware-signing")
+#   sig = policy.sign(priv, firmware_bytes)
+#
+# QDAY can also inventory this file into the CBOM:
+#   qday scan --agility agility.toml
+
+[agility.purposes]
+# Still classical — the migration backlog QDAY tracks.
+document-signing = "rsa-3072"
+token-signing    = "ecdsa-p256"
+
+# Already migrated: a CNSA 2.0-style hybrid. Holds as long as either arm is
+# unbroken, so it's safe against a quantum adversary today.
+firmware-signing = "hybrid:ecdsa-p384+ml-dsa-65"
+
+[agility.policy]
+# Suites the policy refuses to mint NEW keys with. Flip a binding to one of
+# these and generate() raises, so migration can't silently regress.
+deprecated = ["rsa-2048", "ecdsa-p256"]

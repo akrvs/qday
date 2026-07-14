@@ -1,7 +1,7 @@
 """Command-line entry point.
 
     qday scan  [--tls HOST[:PORT] ...] [--discover HOST|CIDR[:PORTS] ...]
-               [--certs DIR] [--code DIR] [--deps DIR]
+               [--certs DIR] [--code DIR] [--deps DIR] [--agility TOML]
                [--config qday.toml] [--fail-on LEVEL]
     qday report [--run ID] [--json]
     qday diff  [--from ID] [--to ID]
@@ -32,6 +32,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     cert_dirs = [args.certs] if args.certs else []
     code_dirs = [args.code] if args.code else []
     dep_dirs = [args.deps] if args.deps else []
+    agility_files = [args.agility] if args.agility else []
     annotations: list[dict] = []
 
     config_path = args.config
@@ -47,6 +48,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         cert_dirs += cfg["certs"]
         code_dirs += cfg["code"]
         dep_dirs += cfg["deps"]
+        agility_files += cfg["agility"]
         annotations = cfg["annotations"]
 
     discover_specs = list(args.discover or [])
@@ -60,9 +62,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(f"discovery: {len(live)} live endpoint(s) found")
         tls_targets += live
 
-    if not (tls_targets or cert_dirs or code_dirs or dep_dirs):
-        print("nothing to scan: pass --tls/--certs/--code/--deps or add a "
-              "[scan] section to qday.toml", file=sys.stderr)
+    if not (tls_targets or cert_dirs or code_dirs or dep_dirs
+            or agility_files):
+        print("nothing to scan: pass --tls/--certs/--code/--deps/--agility "
+              "or add a [scan] section to qday.toml", file=sys.stderr)
         return 2
 
     assets: list[CryptoAsset] = []
@@ -89,6 +92,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         from .scanners.deps import DepScanner
         for d in dep_dirs:
             assets.extend(DepScanner(d).scan())
+    if agility_files:
+        from .scanners.agility import AgilityScanner
+        for f in agility_files:
+            assets.extend(AgilityScanner(f).scan())
 
     annotated = 0
     if annotations:
@@ -208,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="scan a source tree for crypto usage")
     ps.add_argument("--deps", metavar="DIR",
                     help="scan dependency manifests for crypto libraries")
+    ps.add_argument("--agility", metavar="TOML",
+                    help="inventory a crypto-agility policy file")
     ps.add_argument("--label", help="label for this run")
     ps.add_argument("--config", metavar="TOML",
                     help="scan config (default: qday.toml if present)")
