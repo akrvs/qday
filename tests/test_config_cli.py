@@ -62,6 +62,15 @@ def test_scan_diff_and_fail_on(cert_dir, tmp_path, capsys):
     assert "-1 resolved" in out and "signer.key" in out
 
 
+def test_repeatable_dir_flags(cert_dir, tmp_path, capsys):
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "extra.key").write_bytes((cert_dir / "signer.key").read_bytes())
+    assert main(["--db", str(tmp_path / "d.db"), "scan",
+                 "--certs", str(cert_dir), "--certs", str(other)]) == 0
+    assert "4 crypto assets" in capsys.readouterr().out
+
+
 def test_scan_rejects_bad_tls_target(tmp_path, capsys):
     db = str(tmp_path / "d.db")
     for target in ("host:notaport", ":443", "host:0", "host:70000"):

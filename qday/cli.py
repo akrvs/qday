@@ -29,10 +29,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     from .config import DEFAULT_CONFIG, ConfigError, load_config
 
     tls_targets = list(args.tls or [])
-    cert_dirs = [args.certs] if args.certs else []
-    code_dirs = [args.code] if args.code else []
-    dep_dirs = [args.deps] if args.deps else []
-    agility_files = [args.agility] if args.agility else []
+    cert_dirs = list(args.certs or [])
+    code_dirs = list(args.code or [])
+    dep_dirs = list(args.deps or [])
+    agility_files = list(args.agility or [])
     annotations: list[dict] = []
 
     config_path = args.config
@@ -216,14 +216,16 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--discover", action="append", metavar="HOST|CIDR[:PORTS]",
                     help="probe a host/CIDR + port list, scan what answers "
                          "(e.g. 10.0.0.0/28:443,8443)")
-    ps.add_argument("--certs", metavar="DIR",
-                    help="scan a directory for certificate/key files")
-    ps.add_argument("--code", metavar="DIR",
-                    help="scan a source tree for crypto usage")
-    ps.add_argument("--deps", metavar="DIR",
-                    help="scan dependency manifests for crypto libraries")
-    ps.add_argument("--agility", metavar="TOML",
-                    help="inventory a crypto-agility policy file")
+    ps.add_argument("--certs", action="append", metavar="DIR",
+                    help="scan a directory for certificate/key files "
+                         "(repeatable)")
+    ps.add_argument("--code", action="append", metavar="DIR",
+                    help="scan a source tree for crypto usage (repeatable)")
+    ps.add_argument("--deps", action="append", metavar="DIR",
+                    help="scan dependency manifests for crypto libraries "
+                         "(repeatable)")
+    ps.add_argument("--agility", action="append", metavar="TOML",
+                    help="inventory a crypto-agility policy file (repeatable)")
     ps.add_argument("--label", help="label for this run")
     ps.add_argument("--config", metavar="TOML",
                     help="scan config (default: qday.toml if present)")
