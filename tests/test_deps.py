@@ -72,6 +72,16 @@ def test_dep_scanner_across_ecosystems(manifests):
     assert not any("node_modules" in a.location for a in assets)
 
 
+def test_v2_lockfile_with_both_sections_not_duplicated(tmp_path):
+    (tmp_path / "package-lock.json").write_text(json.dumps({
+        "lockfileVersion": 2,
+        "packages": {"node_modules/elliptic": {"version": "6.5.4"}},
+        "dependencies": {"elliptic": {"version": "6.5.4"}},
+    }))
+    assets = list(DepScanner(tmp_path).scan())
+    assert [a.details["package"] for a in assets] == ["elliptic"]
+
+
 def test_broken_manifest_is_skipped_not_fatal(tmp_path):
     (tmp_path / "package-lock.json").write_text("{ this is not json ")
     (tmp_path / "requirements.txt").write_text("cryptography==42.0\n")

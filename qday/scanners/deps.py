@@ -67,7 +67,7 @@ class DepScanner:
             except (ValueError, OSError, ElementTree.ParseError,
                     tomllib.TOMLDecodeError, json.JSONDecodeError):
                 continue
-            for pkg, version in packages:
+            for pkg, version in dict.fromkeys(packages):
                 family = _catalog_match(catalog, pkg, ecosystem)
                 if family is None:
                     continue
@@ -106,15 +106,17 @@ class DepScanner:
     def _parse_package_lock(self, path: Path) -> list[tuple[str, str | None]]:
         doc = json.loads(path.read_text())
         out = []
-        # npm v7+ lockfile: keyed by "node_modules/<name>"
-        for key, meta in (doc.get("packages") or {}).items():
-            if not key:
-                continue
-            name = key.split("node_modules/")[-1]
-            out.append((name, meta.get("version")))
-        # v6 fallback
-        for name, meta in (doc.get("dependencies") or {}).items():
-            out.append((name, meta.get("version")))
+        # npm v7+ lockfile: keyed by "node_modules/<name>". v2 lockfiles
+        # carry a legacy "dependencies" section too, so it is a fallback,
+        # not an addition.
+        if doc.get("packages"):
+            for key, meta in doc["packages"].items():
+                if key:
+                    out.append((key.split("node_modules/")[-1],
+                                meta.get("version")))
+        else:
+            for name, meta in (doc.get("dependencies") or {}).items():
+                out.append((name, meta.get("version")))
         return out
 
     def _parse_package_json(self, path: Path) -> list[tuple[str, str | None]]:
