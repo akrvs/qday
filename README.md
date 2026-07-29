@@ -190,15 +190,3 @@ deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
 2030-12-31   NIST IR 8547 — 112-bit-security algorithms deprecated
 2035-12-31   NIST / CNSA 2.0 — quantum-vulnerable crypto disallowed
 ```
-
-## [ Next Ops ]
-
-- [x] Full certificate chain capture (leaf / intermediate / root roles)
-- [x] Lifespan/exposure annotations via `qday.toml`
-- [x] Run-to-run diff (CLI + dashboard panel) + `--fail-on` CI gate
-- [x] Port-range / subnet endpoint discovery (`--discover`)
-- [x] Dependency-manifest scanning (pypi · npm · go · cargo · maven)
-- [x] Crypto-agility layer: purpose-based policy, hybrid PQC, config-only swap
-- [x] ML-KEM key-encapsulation suites (FIPS 203, via the optional oqs backend)
-- [x] CycloneDX CBOM import — merge estates scanned by other tools
-- [x] `diff --json` + `--fail-on-new` CI gate; repeatable scan flags
