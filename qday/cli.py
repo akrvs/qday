@@ -72,13 +72,20 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if tls_targets:
         from .scanners.tls import TlsScanner
 
-        def scan_one(target: str) -> list[CryptoAsset]:
+        endpoints: list[tuple[str, int]] = []
+        for target in tls_targets:
             host, _, port = target.partition(":")
-            return list(TlsScanner(host, int(port or 443)).scan())
+            port_num = int(port) if port.isdigit() else (443 if not port else 0)
+            if not host or not 0 < port_num < 65536:
+                print(f"invalid TLS target {target!r}: expected HOST[:PORT]",
+                      file=sys.stderr)
+                return 2
+            endpoints.append((host, port_num))
 
         # Handshakes are network-bound; a pool turns N × timeout into ~timeout.
-        with ThreadPoolExecutor(max_workers=min(16, len(tls_targets))) as pool:
-            for result in pool.map(scan_one, tls_targets):
+        with ThreadPoolExecutor(max_workers=min(16, len(endpoints))) as pool:
+            for result in pool.map(
+                    lambda hp: list(TlsScanner(*hp).scan()), endpoints):
                 assets.extend(result)
     if cert_dirs:
         from .scanners.certs import CertFileScanner

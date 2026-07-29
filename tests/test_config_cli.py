@@ -62,6 +62,13 @@ def test_scan_diff_and_fail_on(cert_dir, tmp_path, capsys):
     assert "-1 resolved" in out and "signer.key" in out
 
 
+def test_scan_rejects_bad_tls_target(tmp_path, capsys):
+    db = str(tmp_path / "d.db")
+    for target in ("host:notaport", ":443", "host:0", "host:70000"):
+        assert main(["--db", db, "scan", "--tls", target]) == 2
+    assert "invalid TLS target" in capsys.readouterr().err
+
+
 def test_scan_uses_config_targets(cert_dir, tmp_path, capsys, monkeypatch):
     cfg = tmp_path / "qday.toml"
     cfg.write_text(f"""
