@@ -78,6 +78,26 @@ def test_scan_rejects_bad_tls_target(tmp_path, capsys):
     assert "invalid TLS target" in capsys.readouterr().err
 
 
+def test_diff_json_and_fail_on_new(cert_dir, tmp_path, capsys):
+    import json
+
+    db = str(tmp_path / "d.db")
+    key_bytes = (cert_dir / "signer.key").read_bytes()
+    assert main(["--db", db, "scan", "--certs", str(cert_dir)]) == 0
+    (cert_dir / "signer.key").unlink()
+    assert main(["--db", db, "scan", "--certs", str(cert_dir)]) == 0
+
+    assert main(["--db", db, "diff", "--fail-on-new", "high"]) == 0
+    capsys.readouterr()
+    assert main(["--db", db, "diff", "--json"]) == 0
+    delta = json.loads(capsys.readouterr().out)
+    assert delta["resolved"] and not delta["new"]
+
+    (cert_dir / "signer.key").write_bytes(key_bytes)
+    assert main(["--db", db, "scan", "--certs", str(cert_dir)]) == 0
+    assert main(["--db", db, "diff", "--fail-on-new", "high"]) == 3
+
+
 def test_scan_uses_config_targets(cert_dir, tmp_path, capsys, monkeypatch):
     cfg = tmp_path / "qday.toml"
     cfg.write_text(f"""

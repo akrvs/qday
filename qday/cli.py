@@ -4,7 +4,7 @@
                [--certs DIR] [--code DIR] [--deps DIR] [--agility TOML]
                [--config qday.toml] [--fail-on LEVEL]
     qday report [--run ID] [--json]
-    qday diff  [--from ID] [--to ID]
+    qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
     qday export [--run ID] -o cbom.json
     qday serve  [--port 8080]
 """
@@ -140,13 +140,26 @@ def _cmd_diff(args: argparse.Namespace) -> int:
     to_id = args.to_run or history[-1]["id"]
     delta = store.diff_runs(from_id, to_id)
 
-    print(f"run {from_id} -> run {to_id}: "
-          f"+{len(delta['new'])} new, -{len(delta['resolved'])} resolved, "
-          f"{len(delta['persisting'])} persisting")
-    for tag, rows in (("+", delta["new"]), ("-", delta["resolved"])):
-        for r in rows:
-            print(f"  {tag} [{r['risk_level'] or '-'}] {r['algorithm']:<8} "
-                  f"{r['asset_type']:<14} {r['location']}")
+    if args.json:
+        print(json.dumps({"from": from_id, "to": to_id, **delta}, indent=2))
+    else:
+        print(f"run {from_id} -> run {to_id}: "
+              f"+{len(delta['new'])} new, -{len(delta['resolved'])} resolved, "
+              f"{len(delta['persisting'])} persisting")
+        for tag, rows in (("+", delta["new"]), ("-", delta["resolved"])):
+            for r in rows:
+                print(f"  {tag} [{r['risk_level'] or '-'}] "
+                      f"{r['algorithm']:<8} {r['asset_type']:<14} "
+                      f"{r['location']}")
+
+    if args.fail_on_new:
+        threshold = _LEVEL_RANK[args.fail_on_new]
+        worst = max((_LEVEL_RANK.get(r["risk_level"], 0)
+                     for r in delta["new"]), default=-1)
+        if worst >= threshold:
+            print(f"fail-on-new={args.fail_on_new}: new asset at threshold "
+                  "(exit 3)", file=sys.stderr)
+            return 3
     return 0
 
 
@@ -237,6 +250,10 @@ def main(argv: list[str] | None = None) -> int:
     pd = sub.add_parser("diff", help="compare two runs (default: last two)")
     pd.add_argument("--from", dest="from_run", type=int, metavar="ID")
     pd.add_argument("--to", dest="to_run", type=int, metavar="ID")
+    pd.add_argument("--json", action="store_true")
+    pd.add_argument("--fail-on-new", choices=list(_LEVEL_RANK),
+                    help="exit 3 if a NEW asset reaches this risk level "
+                         "(CI gate that ignores known backlog)")
     pd.set_defaults(fn=_cmd_diff)
 
     pr = sub.add_parser("report", help="print inventory for a run")
