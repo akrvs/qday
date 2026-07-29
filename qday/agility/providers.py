@@ -278,7 +278,9 @@ def _frame(parts: list[bytes]) -> bytes:
 def _unframe(blob: bytes) -> list[bytes]:
     parts, i = [], 0
     while i < len(blob):
-        (n,) = (int.from_bytes(blob[i:i + 4], "big"),)
+        if len(blob) - i < 4:
+            raise ValueError("truncated framed payload")
+        n = int.from_bytes(blob[i:i + 4], "big")
         i += 4
         if i + n > len(blob):
             raise ValueError("truncated framed payload")

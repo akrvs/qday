@@ -88,20 +88,15 @@ class CryptoPolicy:
             self._providers[suite] = build_provider(suite)
         return self._providers[suite]
 
-    def _provider_for_purpose(self, purpose: str) -> SignatureProvider:
-        if purpose not in self.purposes:
-            raise PolicyError(f"unknown purpose {purpose!r}; known: "
-                              f"{sorted(self.purposes)}")
-        return self._provider_for(self.purposes[purpose])
-
     # --- application API --------------------------------------------------
 
     def generate(self, purpose: str) -> tuple[AgileKey, AgileKey]:
         """New keypair for a purpose, using its current suite binding.
         Refuses deprecated suites — new keys must not regress."""
-        suite = self.purposes[purpose] if purpose in self.purposes else None
+        suite = self.purposes.get(purpose)
         if suite is None:
-            raise PolicyError(f"unknown purpose {purpose!r}")
+            raise PolicyError(f"unknown purpose {purpose!r}; known: "
+                              f"{sorted(self.purposes)}")
         if suite in self.deprecated:
             raise DeprecatedSuiteError(
                 f"purpose {purpose!r} is bound to deprecated suite {suite!r}; "
