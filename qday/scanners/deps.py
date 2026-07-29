@@ -23,6 +23,7 @@ from xml.etree import ElementTree
 import yaml
 
 from ..model import AssetType, CryptoAsset, Exposure
+from .base import walk_files
 
 _SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__",
               "dist", "build", "vendor", ".tox", "target"}
@@ -54,13 +55,9 @@ class DepScanner:
         self._catalog = load_catalog()
 
     def scan(self) -> Iterator[CryptoAsset]:
-        for path in sorted(self.root.rglob("*")):
+        for path in walk_files(self.root, _SKIP_DIRS, _MAX_FILE_BYTES):
             spec = self._MANIFESTS.get(path.name)
-            if spec is None or not path.is_file():
-                continue
-            if _SKIP_DIRS.intersection(path.parts[:-1]):
-                continue
-            if path.stat().st_size > _MAX_FILE_BYTES:
+            if spec is None:
                 continue
             ecosystem, parser_name = spec
             catalog = self._catalog.get(ecosystem, {})

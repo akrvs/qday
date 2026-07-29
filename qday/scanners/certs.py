@@ -12,6 +12,7 @@ from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 
 from ..model import AssetType, CryptoAsset, Exposure
+from .base import walk_files
 from .keyinfo import classify_key
 
 CERT_EXTENSIONS = {".pem", ".crt", ".cer", ".der", ".key", ".pub", ".p8"}
@@ -26,17 +27,15 @@ class CertFileScanner:
         self.root = Path(root)
 
     def scan(self) -> Iterator[CryptoAsset]:
-        for path in sorted(self.root.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in CERT_EXTENSIONS:
-                continue
-            if _SKIP_DIRS.intersection(path.parts):
-                continue
-            if path.stat().st_size > _MAX_FILE_BYTES:
-                continue
-            yield from self._scan_file(path)
+        for path in walk_files(self.root, _SKIP_DIRS, _MAX_FILE_BYTES):
+            if path.suffix.lower() in CERT_EXTENSIONS:
+                yield from self._scan_file(path)
 
     def _scan_file(self, path: Path) -> Iterator[CryptoAsset]:
-        data = path.read_bytes()
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return
         rel = str(path.relative_to(self.root))
         found = False
         for cert in _load_certs(data):

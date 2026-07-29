@@ -17,6 +17,7 @@ from typing import Iterator
 import yaml
 
 from ..model import AssetType, CryptoAsset, Exposure
+from .base import walk_files
 
 _SKIP_DIRS = {".git", ".svn", ".venv", "venv", "node_modules",
               "__pycache__", "dist", "build", "vendor", ".tox"}
@@ -78,11 +79,7 @@ class CodeScanner:
         self._by_ext, self._generic = load_rules()
 
     def scan(self) -> Iterator[CryptoAsset]:
-        for path in sorted(self.root.rglob("*")):
-            if _SKIP_DIRS.intersection(path.parts) or not path.is_file():
-                continue
-            if path.stat().st_size > _MAX_FILE_BYTES:
-                continue
+        for path in walk_files(self.root, _SKIP_DIRS, _MAX_FILE_BYTES):
             rules = self._by_ext.get(path.suffix.lower(), []) + self._generic
             try:
                 text = path.read_text(errors="ignore")

@@ -27,6 +27,13 @@ def test_cert_file_scanner(cert_dir):
     assert key.details["private"] is True
 
 
+def test_cert_scanner_prunes_skip_dirs(cert_dir):
+    skipped = cert_dir / "node_modules"
+    skipped.mkdir()
+    (skipped / "copy.crt").write_bytes((cert_dir / "server.crt").read_bytes())
+    assert len(list(CertFileScanner(cert_dir).scan())) == 2
+
+
 def test_tls_scanner_against_local_server(tmp_path):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     cert = make_self_signed(key, "localhost")
