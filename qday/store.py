@@ -57,18 +57,21 @@ class Store:
             (datetime.now(timezone.utc).isoformat(timespec="seconds"), label),
         )
         run_id = cur.lastrowid
+        rows = []
         for a in assets:
             row = a.to_row()
             score, level = scores.get(row["asset_id"], (None, None))
             row.update({"run_id": run_id, "risk_score": score,
                         "risk_level": level})
-            cols = ", ".join(row)
-            ph = ", ".join(f":{k}" for k in row)
+            rows.append(row)
+        if rows:
+            cols = ", ".join(rows[0])
+            ph = ", ".join(f":{k}" for k in rows[0])
             # ON CONFLICT: two scanners may legitimately see the same asset
             # (e.g. a cert on disk and the same cert served over TLS from
             # the same location string); keep the first sighting.
-            self._con.execute(
-                f"INSERT OR IGNORE INTO assets ({cols}) VALUES ({ph})", row)
+            self._con.executemany(
+                f"INSERT OR IGNORE INTO assets ({cols}) VALUES ({ph})", rows)
         self._con.commit()
         return run_id
 
