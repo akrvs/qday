@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from qday.agility import (
@@ -33,6 +35,21 @@ def test_key_envelope_round_trip(suite):
     assert AgileKey.peek_suite(policy.serialize_key(pub)) == suite
     sig2 = policy.sign(reloaded_priv, data)
     assert policy.verify(reloaded_pub, data, sig2)
+
+
+def test_to_file_round_trip_and_private_perms(tmp_path):
+    policy = CryptoPolicy({"p": "ed25519"})
+    priv, pub = policy.generate("p")
+    provider = policy._provider_for("ed25519")
+    priv_path, pub_path = tmp_path / "k.priv", tmp_path / "k.pub"
+    priv.to_file(priv_path, provider)
+    pub.to_file(pub_path, provider)
+
+    data = b"payload"
+    sig = policy.sign(policy.load_key(priv_path.read_bytes()), data)
+    assert policy.verify(policy.load_key(pub_path.read_bytes()), data, sig)
+    if os.name == "posix":
+        assert priv_path.stat().st_mode & 0o777 == 0o600
 
 
 def test_the_migration_is_config_only(tmp_path):

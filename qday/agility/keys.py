@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from dataclasses import dataclass
 
 
@@ -34,7 +35,10 @@ class AgileKey:
         return json.dumps(envelope).encode()
 
     def to_file(self, path, provider) -> None:
-        with open(path, "wb") as fh:
+        mode = 0o600 if self.is_private else 0o644
+        flags = (os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+                 | getattr(os, "O_BINARY", 0))
+        with os.fdopen(os.open(path, flags, mode), "wb") as fh:
             fh.write(self.to_bytes(provider))
 
     @staticmethod
