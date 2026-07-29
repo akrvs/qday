@@ -66,7 +66,7 @@ def test_scan_uses_config_targets(cert_dir, tmp_path, capsys, monkeypatch):
     cfg = tmp_path / "qday.toml"
     cfg.write_text(f"""
 [scan]
-certs = ["{cert_dir}"]
+certs = ["{cert_dir.as_posix()}"]
 
 [[annotate]]
 match = "*"
