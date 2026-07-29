@@ -26,9 +26,12 @@ from .providers import (
     Ed25519Provider,
     HybridProvider,
     MLDSAProvider,
+    MLKEMProvider,
     RSAProvider,
     SignatureProvider,
 )
+
+Provider = SignatureProvider | MLKEMProvider
 
 
 class PolicyError(Exception):
@@ -40,14 +43,20 @@ class DeprecatedSuiteError(PolicyError):
     keys — the guard rail that stops migration from silently regressing."""
 
 
-def build_provider(suite: str) -> SignatureProvider:
+def build_provider(suite: str) -> Provider:
     """Construct a provider from a suite id. `hybrid:a+b` composes two."""
     if suite.startswith("hybrid:"):
         body = suite[len("hybrid:"):]
         if "+" not in body:
             raise PolicyError(f"hybrid suite must be 'hybrid:a+b', got {suite!r}")
         first, second = body.split("+", 1)
-        return HybridProvider(build_provider(first), build_provider(second))
+        arms = (build_provider(first), build_provider(second))
+        if not all(hasattr(p, "sign") for p in arms):
+            raise PolicyError(
+                f"hybrid arms must be signature suites, got {suite!r}")
+        return HybridProvider(*arms)
+    if suite.startswith("ml-kem-"):
+        return MLKEMProvider(suite)
     if suite.startswith("rsa-"):
         return RSAProvider(int(suite.split("-", 1)[1]))
     if suite.startswith("ecdsa-"):
@@ -67,7 +76,7 @@ class CryptoPolicy:
         self.purposes = dict(purposes)
         self.deprecated = set(deprecated or [])
         # One provider instance per distinct suite in play (purposes may share).
-        self._providers: dict[str, SignatureProvider] = {}
+        self._providers: dict[str, Provider] = {}
         for suite in self.purposes.values():
             self._provider_for(suite)
 
@@ -83,7 +92,7 @@ class CryptoPolicy:
         deprecated = root.get("policy", {}).get("deprecated", [])
         return cls(purposes, deprecated)
 
-    def _provider_for(self, suite: str) -> SignatureProvider:
+    def _provider_for(self, suite: str) -> Provider:
         if suite not in self._providers:
             self._providers[suite] = build_provider(suite)
         return self._providers[suite]
@@ -110,13 +119,39 @@ class CryptoPolicy:
     def sign(self, private_key: AgileKey, data: bytes) -> bytes:
         if not private_key.is_private:
             raise PolicyError("sign requires a private key")
-        provider = self._provider_for(private_key.suite)
+        provider = self._signature_provider(private_key.suite)
         return provider.sign(private_key._obj, data)
 
     def verify(self, public_key: AgileKey, data: bytes,
                signature: bytes) -> bool:
-        provider = self._provider_for(public_key.suite)
+        provider = self._signature_provider(public_key.suite)
         return provider.verify(public_key._obj, data, signature)
+
+    def encapsulate(self, public_key: AgileKey) -> tuple[bytes, bytes]:
+        """Return (ciphertext, shared_secret) against the peer's public key;
+        the peer recovers the secret with decapsulate."""
+        provider = self._kem_provider(public_key.suite)
+        return provider.encapsulate(public_key._obj)
+
+    def decapsulate(self, private_key: AgileKey,
+                    ciphertext: bytes) -> bytes:
+        if not private_key.is_private:
+            raise PolicyError("decapsulate requires a private key")
+        provider = self._kem_provider(private_key.suite)
+        return provider.decapsulate(private_key._obj, ciphertext)
+
+    def _signature_provider(self, suite: str) -> SignatureProvider:
+        provider = self._provider_for(suite)
+        if not hasattr(provider, "sign"):
+            raise PolicyError(f"suite {suite!r} is a KEM; use "
+                              "encapsulate/decapsulate")
+        return provider
+
+    def _kem_provider(self, suite: str) -> MLKEMProvider:
+        provider = self._provider_for(suite)
+        if not hasattr(provider, "encapsulate"):
+            raise PolicyError(f"suite {suite!r} is not a KEM")
+        return provider
 
     def serialize_key(self, key: AgileKey) -> bytes:
         return key.to_bytes(self._provider_for(key.suite))

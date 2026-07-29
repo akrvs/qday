@@ -22,6 +22,9 @@ token-signing    = "ecdsa-p256"
 # unbroken, so it's safe against a quantum adversary today.
 firmware-signing = "hybrid:ecdsa-p384+ml-dsa-65"
 
+# Key encapsulation: ML-KEM (FIPS 203) via policy.encapsulate/decapsulate.
+session-keys = "ml-kem-768"
+
 [agility.policy]
 # Suites the policy refuses to mint NEW keys with. Flip a binding to one of
 # these and generate() raises, so migration can't silently regress.

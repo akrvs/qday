@@ -168,8 +168,10 @@ deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
 ```
 
 - **Providers** are pluggable: RSA, ECDSA (P-256/384/521), Ed25519/Ed448 ship
-  real (via `cryptography`); ML-DSA (FIPS 204) is wired through the optional
-  `oqs` backend — `pip install oqs` activates it with zero code change.
+  real (via `cryptography`); ML-DSA (FIPS 204) signatures and ML-KEM (FIPS
+  203) key encapsulation (`policy.encapsulate`/`decapsulate`) are wired
+  through the optional `oqs` backend — `pip install oqs` activates them with
+  zero code change.
 - **Hybrids** sign with both arms and require both to verify, so the signature
   is no weaker than its stronger arm.
 - **Dogfooded**: `qday scan --agility agility.toml` inventories the policy
@@ -192,4 +194,4 @@ deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
 - [x] Port-range / subnet endpoint discovery (`--discover`)
 - [x] Dependency-manifest scanning (pypi · npm · go · cargo · maven)
 - [x] Crypto-agility layer: purpose-based policy, hybrid PQC, config-only swap
-- [ ] ML-KEM key-encapsulation suites (signatures land first; KEM next)
+- [x] ML-KEM key-encapsulation suites (FIPS 203, via the optional oqs backend)

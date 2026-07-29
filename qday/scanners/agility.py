@@ -28,9 +28,11 @@ class AgilityScanner:
             return
         rel = self.policy_path.name
         for row in policy.inventory():
-            # A hybrid/PQC binding is already migrated; the family passed to
-            # CryptoAsset drives quantum-vulnerable classification downstream.
-            algorithm = "ML-DSA" if row["quantum_safe"] else row["family"]
+            # A quantum-safe hybrid has no family of its own; map it to its
+            # PQC arm's family so downstream classification counts it safe.
+            algorithm = row["family"]
+            if algorithm == "hybrid" and row["quantum_safe"]:
+                algorithm = "ML-DSA"
             yield CryptoAsset(
                 name=f"policy purpose '{row['purpose']}' -> {row['suite']}",
                 asset_type=AssetType.CODE_FINDING,

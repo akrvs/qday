@@ -140,16 +140,42 @@ class Ed448Provider(_EdProvider):
         return ed448.Ed448PrivateKey.generate()
 
 
-class MLDSAProvider:
-    """NIST ML-DSA (FIPS 204) via the optional `oqs` backend (liboqs).
+class _OQSProvider:
+    """Base for suites backed by the optional `oqs` package (liboqs).
 
-    The suite is fully wired even when the backend is absent — that is the
+    Suites are fully wired even when the backend is absent — that is the
     migration promise: `pip install oqs` turns the config binding live with
-    zero application changes. Without it, only key generation / signing raise,
-    and only when actually invoked.
+    zero application changes. Without it, only actual key operations raise,
+    and only when invoked.
     """
 
     quantum_safe = True
+
+    def _backend(self):
+        try:
+            import oqs  # noqa: PLC0415 (optional dependency)
+        except ImportError as exc:
+            raise BackendUnavailable(
+                f"{self.suite} needs the 'oqs' package (liboqs). "
+                "Install it to activate post-quantum crypto.") from exc
+        return oqs
+
+    def serialize_private(self, private_obj) -> bytes:
+        return private_obj.secret
+
+    def load_private(self, blob: bytes):
+        return _OQSKeyPair(self._mechanism, blob, None)
+
+    def serialize_public(self, public_obj) -> bytes:
+        return public_obj.public
+
+    def load_public(self, blob: bytes):
+        return _OQSKeyPair(self._mechanism, None, blob)
+
+
+class MLDSAProvider(_OQSProvider):
+    """NIST ML-DSA (FIPS 204) signatures."""
+
     family = "ML-DSA"
     _MECHANISM = {"ml-dsa-44": "Dilithium2", "ml-dsa-65": "Dilithium3",
                   "ml-dsa-87": "Dilithium5"}
@@ -159,15 +185,6 @@ class MLDSAProvider:
             raise ValueError(f"unknown ML-DSA level {level!r}")
         self.suite = level
         self._mechanism = self._MECHANISM[level]
-
-    def _backend(self):
-        try:
-            import oqs  # noqa: PLC0415 (optional dependency)
-        except ImportError as exc:
-            raise BackendUnavailable(
-                f"{self.suite} needs the 'oqs' package (liboqs). "
-                "Install it to activate post-quantum signing.") from exc
-        return oqs
 
     def generate(self):
         oqs = self._backend()
@@ -186,17 +203,37 @@ class MLDSAProvider:
         with oqs.Signature(self._mechanism) as verifier:
             return bool(verifier.verify(data, signature, public_obj.public))
 
-    def serialize_private(self, private_obj) -> bytes:
-        return private_obj.secret
 
-    def load_private(self, blob: bytes):
-        return _OQSKeyPair(self._mechanism, blob, None)
+class MLKEMProvider(_OQSProvider):
+    """NIST ML-KEM (FIPS 203) key encapsulation."""
 
-    def serialize_public(self, public_obj) -> bytes:
-        return public_obj.public
+    family = "ML-KEM"
+    _MECHANISM = {"ml-kem-512": "Kyber512", "ml-kem-768": "Kyber768",
+                  "ml-kem-1024": "Kyber1024"}
 
-    def load_public(self, blob: bytes):
-        return _OQSKeyPair(self._mechanism, None, blob)
+    def __init__(self, level: str):
+        if level not in self._MECHANISM:
+            raise ValueError(f"unknown ML-KEM level {level!r}")
+        self.suite = level
+        self._mechanism = self._MECHANISM[level]
+
+    def generate(self):
+        oqs = self._backend()
+        kem = oqs.KeyEncapsulation(self._mechanism)
+        public = kem.generate_keypair()
+        return _OQSKeyPair(self._mechanism, kem.export_secret_key(), public)
+
+    def encapsulate(self, public_obj) -> tuple[bytes, bytes]:
+        oqs = self._backend()
+        with oqs.KeyEncapsulation(self._mechanism) as kem:
+            ciphertext, shared_secret = kem.encap_secret(public_obj.public)
+            return ciphertext, shared_secret
+
+    def decapsulate(self, private_obj, ciphertext: bytes) -> bytes:
+        oqs = self._backend()
+        with oqs.KeyEncapsulation(self._mechanism,
+                                  private_obj.secret) as kem:
+            return kem.decap_secret(ciphertext)
 
 
 class _OQSKeyPair:

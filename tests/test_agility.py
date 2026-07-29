@@ -145,6 +145,40 @@ deprecated = ["rsa-2048"]
     assert fw.pqc_ready and not fw.quantum_vulnerable  # PQC hybrid is safe
 
 
+def test_mlkem_wired_but_backend_optional():
+    from qday.agility.providers import BackendUnavailable, MLKEMProvider
+
+    policy = CryptoPolicy({"session-keys": "ml-kem-768"})
+    (row,) = policy.inventory()
+    assert row["family"] == "ML-KEM" and row["quantum_safe"] is True
+
+    try:
+        import oqs  # noqa: F401
+    except ImportError:
+        with pytest.raises(BackendUnavailable):
+            MLKEMProvider("ml-kem-768").generate()
+    else:
+        priv, pub = policy.generate("session-keys")
+        ciphertext, secret = policy.encapsulate(pub)
+        assert policy.decapsulate(priv, ciphertext) == secret
+
+
+def test_sign_and_kem_apis_do_not_cross():
+    policy = CryptoPolicy({"session-keys": "ml-kem-768", "sig": "ed25519"})
+    priv, pub = policy.generate("sig")
+    with pytest.raises(PolicyError):
+        policy.encapsulate(pub)
+    with pytest.raises(PolicyError):
+        policy.decapsulate(priv, b"ct")
+    with pytest.raises(PolicyError):
+        policy.sign(AgileKey("ml-kem-768", True, None), b"x")
+
+
+def test_hybrid_rejects_kem_arm():
+    with pytest.raises(PolicyError):
+        CryptoPolicy({"p": "hybrid:ed25519+ml-kem-768"})
+
+
 def test_mldsa_wired_but_backend_optional():
     """The PQC suite constructs and reports correctly even without liboqs;
     only actual key ops require the backend."""
