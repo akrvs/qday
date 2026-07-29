@@ -100,11 +100,16 @@ qday scan --code . --deps . --fail-on critical
 # Inventory for the latest run, ranked by risk (--json for machines)
 qday report
 
-# What changed between runs: +new, -resolved, persisting
-qday diff
+# What changed between runs: +new, -resolved, persisting (--json for machines)
+# CI gate that ignores known backlog: exit 3 only when NEW crypto appears
+qday diff --fail-on-new high
 
 # CycloneDX 1.6 CBOM — cryptographic-asset components, audit-ready
 qday export -o cbom.json
+
+# Merge estates scanned by other tools: any CycloneDX CBOM becomes a run,
+# re-scored by the same risk model, visible on the same dashboard
+qday import other-tool-cbom.json
 
 # The scoreboard: % PQC-safe, deadline countdowns, risk breakdown, trend
 qday serve --port 8080
@@ -195,3 +200,5 @@ deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
 - [x] Dependency-manifest scanning (pypi · npm · go · cargo · maven)
 - [x] Crypto-agility layer: purpose-based policy, hybrid PQC, config-only swap
 - [x] ML-KEM key-encapsulation suites (FIPS 203, via the optional oqs backend)
+- [x] CycloneDX CBOM import — merge estates scanned by other tools
+- [x] `diff --json` + `--fail-on-new` CI gate; repeatable scan flags

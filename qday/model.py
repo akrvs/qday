@@ -86,6 +86,17 @@ def canonical_family(name: str) -> str:
     return _ALIAS_TO_FAMILY.get(name.strip().lower(), name.strip().upper())
 
 
+def known_family(name: str) -> str | None:
+    """Canonical family if the name or a dash-prefix of it is a known alias
+    ("ml-dsa-65" -> "ML-DSA"); None when nothing matches."""
+    parts = name.strip().lower().split("-")
+    for end in range(len(parts), 0, -1):
+        family = _ALIAS_TO_FAMILY.get("-".join(parts[:end]))
+        if family:
+            return family
+    return None
+
+
 def is_quantum_vulnerable(family: str) -> bool:
     return canonical_family(family) in QUANTUM_VULNERABLE_FAMILIES
 

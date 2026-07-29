@@ -1,8 +1,9 @@
-"""CycloneDX 1.6 CBOM export.
+"""CycloneDX 1.6 CBOM export and import.
 
-Emits the JSON directly against the 1.6 schema's `cryptographic-asset`
-component type rather than pulling in a BOM library — the surface we need
-is small and this keeps the dependency tree short for a security tool.
+Emits and parses the JSON directly against the 1.6 schema's
+`cryptographic-asset` component type rather than pulling in a BOM library —
+the surface we need is small and this keeps the dependency tree short for a
+security tool.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 
 from . import __version__
+from .model import AssetType, CryptoAsset, Exposure, known_family
 
 # Our asset types → CycloneDX cryptoProperties.assetType
 _CDX_ASSET_TYPE = {
@@ -30,6 +32,59 @@ _PRIMITIVE = {
     "ML-DSA": "signature", "SLH-DSA": "signature", "FN-DSA": "signature",
     "ML-KEM": "kem", "AES": "block-cipher", "CHACHA20": "stream-cipher",
 }
+
+
+_ASSET_TYPE_FROM_CDX = {
+    "certificate": AssetType.CERTIFICATE,
+    "related-crypto-material": AssetType.KEY_MATERIAL,
+    "protocol": AssetType.TLS_ENDPOINT,
+    "algorithm": AssetType.CODE_FINDING,
+}
+
+
+def import_cbom(doc: dict) -> list[CryptoAsset]:
+    """Parse a CycloneDX BOM — ours or another tool's — into CryptoAssets.
+    Forgiving like the manifest parsers: missing fields degrade to
+    conservative defaults instead of failing the import."""
+    if doc.get("bomFormat") != "CycloneDX":
+        raise ValueError("not a CycloneDX document (bomFormat missing)")
+    assets = []
+    for comp in doc.get("components") or []:
+        if comp.get("type") != "cryptographic-asset":
+            continue
+        crypto = comp.get("cryptoProperties") or {}
+        algo = crypto.get("algorithmProperties") or {}
+        props = {p.get("name"): p.get("value")
+                 for p in comp.get("properties") or []}
+        name = str(comp.get("name") or "imported-asset")
+        occurrences = (comp.get("evidence") or {}).get("occurrences") or []
+        location = name
+        if occurrences:
+            location = str(occurrences[0].get("location") or name)
+        param = str(algo.get("parameterSetIdentifier") or "")
+        try:
+            exposure = Exposure(props.get("qday:exposure", "local"))
+        except ValueError:
+            exposure = Exposure.LOCAL
+        try:
+            lifespan = int(props.get("qday:data_lifespan_years", 10))
+        except (TypeError, ValueError):
+            lifespan = 10
+        assets.append(CryptoAsset(
+            name=name,
+            asset_type=_ASSET_TYPE_FROM_CDX.get(crypto.get("assetType"),
+                                                AssetType.CODE_FINDING),
+            algorithm=(props.get("qday:algorithm_family")
+                       or known_family(name) or name),
+            key_size=int(param) if param.isdigit() else None,
+            curve=algo.get("curve"),
+            location=location,
+            scanner="import",
+            exposure=exposure,
+            data_lifespan_years=lifespan,
+            details={"imported": True, "bom_ref": comp.get("bom-ref", "")},
+        ))
+    return assets
 
 
 def export_cbom(rows: list[dict], run_info: dict | None) -> dict:

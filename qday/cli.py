@@ -6,6 +6,7 @@
     qday report [--run ID] [--json]
     qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
     qday export [--run ID] -o cbom.json
+    qday import CBOM.json [--label TEXT]
     qday serve  [--port 8080]
 """
 
@@ -212,6 +213,26 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_import(args: argparse.Namespace) -> int:
+    from .cbom import import_cbom
+    try:
+        with open(args.file, "rb") as fh:
+            doc = json.load(fh)
+        assets = import_cbom(doc)
+    except (OSError, ValueError) as exc:
+        print(f"import error: {exc}", file=sys.stderr)
+        return 2
+    from .risk import score_asset
+    scores = {a.asset_id: score_asset(a) for a in assets}
+    store = Store(args.db)
+    run_id = store.save_run(assets, scores,
+                            label=args.label or f"import {args.file}")
+    vulnerable = sum(1 for a in assets if a.quantum_vulnerable)
+    print(f"run {run_id}: imported {len(assets)} crypto assets, "
+          f"{vulnerable} quantum-vulnerable  (db: {args.db})")
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     from .dashboard.server import serve
     serve(args.db, args.port)
@@ -266,6 +287,12 @@ def main(argv: list[str] | None = None) -> int:
     pe.add_argument("-o", "--output", default="cbom.json",
                     help="output file, or - for stdout")
     pe.set_defaults(fn=_cmd_export)
+
+    pi = sub.add_parser("import",
+                        help="import a CycloneDX CBOM as a new run")
+    pi.add_argument("file", metavar="CBOM.json")
+    pi.add_argument("--label", help="label for this run")
+    pi.set_defaults(fn=_cmd_import)
 
     pv = sub.add_parser("serve", help="serve the migration dashboard")
     pv.add_argument("--port", type=int, default=8080)
