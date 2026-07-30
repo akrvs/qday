@@ -136,6 +136,12 @@ deps  = ["../backend"]
 match          = "api.example.com*"   # fnmatch against asset location
 lifespan_years = 25                   # harvest-now-decrypt-later horizon
 exposure       = "public"
+
+[[waive]]
+match  = "legacy.example.com*"        # accepted risk: gates skip it,
+reason = "decommission scheduled Q3"  # the score stays on the books
+until  = 2026-10-01                   # mandatory expiry: the finding
+                                      # reactivates after this date
 ```
 
 ## [ Scoring ] — the risk model

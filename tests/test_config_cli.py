@@ -112,3 +112,67 @@ lifespan_years = 30
     assert main(["--db", str(tmp_path / "d.db"), "scan"]) == 0
     out = capsys.readouterr().out
     assert "2 annotated via config" in out
+
+
+def test_waivers_suppress_fail_on(cert_dir, tmp_path, capsys, monkeypatch):
+    cfg = tmp_path / "qday.toml"
+    cfg.write_text(f"""
+[scan]
+certs = ["{cert_dir.as_posix()}"]
+
+[[waive]]
+match = "*"
+reason = "decommission scheduled"
+until = 2999-01-01
+""")
+    monkeypatch.chdir(tmp_path)
+    db = str(tmp_path / "d.db")
+    assert main(["--db", db, "scan", "--fail-on", "high"]) == 0
+    assert "2 waived" in capsys.readouterr().out
+    assert main(["--db", db, "report"]) == 0
+    assert "waived" in capsys.readouterr().out
+
+
+def test_expired_waiver_does_not_apply(cert_dir, tmp_path, monkeypatch):
+    cfg = tmp_path / "qday.toml"
+    cfg.write_text(f"""
+[scan]
+certs = ["{cert_dir.as_posix()}"]
+
+[[waive]]
+match = "*"
+reason = "long gone"
+until = 2020-01-01
+""")
+    monkeypatch.chdir(tmp_path)
+    assert main(["--db", str(tmp_path / "d.db"), "scan",
+                 "--fail-on", "high"]) == 3
+
+
+def test_waiver_requires_fields(tmp_path):
+    bad = tmp_path / "qday.toml"
+    bad.write_text('[[waive]]\nmatch = "*"\n')
+    with pytest.raises(ConfigError):
+        load_config(bad)
+    bad.write_text('[[waive]]\nmatch = "*"\nreason = "x"\nuntil = "soon"\n')
+    with pytest.raises(ConfigError):
+        load_config(bad)
+
+
+def test_apply_waivers_skips_safe_assets():
+    from datetime import date
+
+    from qday.config import apply_waivers
+
+    safe = CryptoAsset(name="s", asset_type=AssetType.CODE_FINDING,
+                       algorithm="ML-DSA", location="src/a.py:1",
+                       scanner="code")
+    risky = CryptoAsset(name="r", asset_type=AssetType.CODE_FINDING,
+                        algorithm="RSA", location="src/b.py:1",
+                        scanner="code")
+    scores = {safe.asset_id: (0.0, "none"), risky.asset_id: (8.0, "critical")}
+    waivers = [{"match": "src/*", "reason": "ok", "until": date(2999, 1, 1)}]
+    assert apply_waivers([safe, risky], scores, waivers) == 1
+    assert scores[safe.asset_id] == (0.0, "none")
+    assert scores[risky.asset_id] == (8.0, "waived")
+    assert risky.details["waived_reason"] == "ok"

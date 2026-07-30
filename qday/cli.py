@@ -52,6 +52,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     dep_dirs = list(args.deps or [])
     agility_files = list(args.agility or [])
     annotations: list[dict] = []
+    waivers: list[dict] = []
 
     config_path = args.config
     if config_path is None and os.path.exists(DEFAULT_CONFIG):
@@ -69,6 +70,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         dep_dirs += cfg["deps"]
         agility_files += cfg["agility"]
         annotations = cfg["annotations"]
+        waivers = cfg["waivers"]
 
     discover_specs = list(args.discover or [])
     if discover_specs:
@@ -133,10 +135,16 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     from .risk import score_asset
     scores = {a.asset_id: score_asset(a) for a in assets}
 
+    waived = 0
+    if waivers:
+        from .config import apply_waivers
+        waived = apply_waivers(assets, scores, waivers)
+
     store = Store(args.db)
     run_id = store.save_run(assets, scores, label=args.label)
     vulnerable = sum(1 for a in assets if a.quantum_vulnerable)
     note = f", {annotated} annotated via config" if annotated else ""
+    note += f", {waived} waived" if waived else ""
     print(f"run {run_id}: {len(assets)} crypto assets found, "
           f"{vulnerable} quantum-vulnerable{note}  (db: {args.db})")
 
