@@ -33,6 +33,7 @@ def test_cbom_from_real_scan(cert_dir, tmp_path):
     props = {p["name"]: p["value"] for p in cert["properties"]}
     assert props["qday:quantum_vulnerable"] == "true"
     assert float(props["qday:risk_score"]) > 0
+    assert "ML-DSA" in props["qday:remediation"]
 
     # export -> import round-trips families, locations and annotations
     imported = import_cbom(doc)

@@ -112,8 +112,11 @@ def export_cbom(rows: list[dict], run_info: dict | None) -> dict:
 
 
 def _component(row: dict) -> dict:
+    from .risk import remediation
     details = json.loads(row.get("details_json") or "{}")
     quantum_level = 0 if row["quantum_vulnerable"] else None
+    hint = remediation(row["algorithm"], row["asset_type"],
+                       row.get("key_size"))
 
     algo_props: dict = {"primitive": _PRIMITIVE.get(row["algorithm"], "other")}
     if row.get("key_size"):
@@ -160,5 +163,5 @@ def _component(row: dict) -> dict:
             {"name": "qday:exposure", "value": row["exposure"]},
             {"name": "qday:data_lifespan_years",
              "value": str(row["data_lifespan_years"])},
-        ],
+        ] + ([{"name": "qday:remediation", "value": hint}] if hint else []),
     }

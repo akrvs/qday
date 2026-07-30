@@ -191,7 +191,11 @@ def _cmd_report(args: argparse.Namespace) -> int:
         print("no scan runs recorded yet — run `qday scan` first",
               file=sys.stderr)
         return 1
+    from .risk import remediation
     rows = store.assets_for_run(run_id)
+    for r in rows:
+        r["remediation"] = remediation(r["algorithm"], r["asset_type"],
+                                       r["key_size"])
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
@@ -204,14 +208,15 @@ def _cmd_report(args: argparse.Namespace) -> int:
           + (f", label: {info['label']}" if info["label"] else "") + ")")
     print(f"Assets: {total}   quantum-vulnerable: {vulnerable}   "
           f"PQC-safe: {migrated_pct:.1f}%\n")
-    fmt = "{:<9} {:<6} {:<8} {:<7} {:<14} {}"
-    print(fmt.format("RISK", "SCORE", "ALGO", "BITS", "TYPE", "LOCATION"))
+    fmt = "{:<9} {:<6} {:<8} {:<7} {:<14} {:<38} {}"
+    print(fmt.format("RISK", "SCORE", "ALGO", "BITS", "TYPE", "MIGRATE-TO",
+                     "LOCATION"))
     for r in rows:
         print(fmt.format(
             r["risk_level"] or "-",
             f"{r['risk_score']:.1f}" if r["risk_score"] is not None else "-",
             r["algorithm"], r["key_size"] or "-", r["asset_type"],
-            r["location"]))
+            r["remediation"] or "-", r["location"]))
     return 0
 
 

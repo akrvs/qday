@@ -1,5 +1,5 @@
 from qday.model import AssetType, CryptoAsset, Exposure
-from qday.risk import score_asset
+from qday.risk import remediation, score_asset
 
 
 def asset(**kw):
@@ -53,3 +53,15 @@ def test_expired_cert_bump():
     fresh, _ = score_asset(asset())
     expired, _ = score_asset(asset(details={"expired": True}))
     assert expired > fresh
+
+
+def test_remediation_hints():
+    assert remediation("RSA", "certificate") == (
+        "ML-DSA-65 (sign) / ML-KEM-768 (encrypt)")
+    assert remediation("ECDH", "tls-endpoint") == (
+        "TLS 1.3 hybrid kex (X25519MLKEM768)")
+    assert remediation("X25519", "ssh-endpoint").startswith("hybrid kex")
+    assert remediation("AES", key_size=128) == "AES-256"
+    assert remediation("AES", key_size=256) is None
+    assert remediation("ML-DSA") is None
+    assert remediation("PQC-HYBRID", "tls-endpoint") is None

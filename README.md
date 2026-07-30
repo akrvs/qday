@@ -101,7 +101,9 @@ qday scan --discover 10.0.0.0/28:443,8443
 # CI gate: exit 3 the moment anything reaches the threshold
 qday scan --code . --deps . --fail-on critical
 
-# Inventory for the latest run, ranked by risk (--json for machines)
+# Inventory for the latest run, ranked by risk (--json for machines),
+# each vulnerable finding paired with a MIGRATE-TO target (also exported
+# as a qday:remediation property in the CBOM)
 qday report
 
 # What changed between runs: +new, -resolved, persisting (--json for machines)

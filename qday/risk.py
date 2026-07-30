@@ -24,6 +24,32 @@ _EXPOSURE_MULT = {Exposure.PUBLIC: 1.25, Exposure.INTERNAL: 1.0,
 LEVELS = ((8.0, "critical"), (6.0, "high"), (3.0, "medium"),
           (0.001, "low"), (0.0, "none"))
 
+_REMEDIATION = {
+    "RSA": "ML-DSA-65 (sign) / ML-KEM-768 (encrypt)",
+    "EC": "ML-DSA-65 / ML-KEM-768",
+    "ECDSA": "ML-DSA-65",
+    "EdDSA": "ML-DSA-65",
+    "DSA": "ML-DSA-65",
+    "ECDH": "ML-KEM-768",
+    "DH": "ML-KEM-768",
+    "X25519": "ML-KEM-768",
+    "X448": "ML-KEM-1024",
+    "DES": "AES-256",
+    "3DES": "AES-256",
+}
+
+
+def remediation(algorithm: str, asset_type: str = "",
+                key_size: int | None = None) -> str | None:
+    from .model import is_quantum_vulnerable
+    if asset_type == "tls-endpoint" and is_quantum_vulnerable(algorithm):
+        return "TLS 1.3 hybrid kex (X25519MLKEM768)"
+    if asset_type == "ssh-endpoint" and is_quantum_vulnerable(algorithm):
+        return "hybrid kex (mlkem768x25519 / sntrup761x25519)"
+    if algorithm == "AES" and (key_size or 0) <= 128:
+        return "AES-256"
+    return _REMEDIATION.get(algorithm)
+
 
 def _base_severity(asset: CryptoAsset) -> float:
     if asset.pqc_ready:
