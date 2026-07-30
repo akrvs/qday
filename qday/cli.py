@@ -229,20 +229,30 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
 
 def _cmd_export(args: argparse.Namespace) -> int:
-    from .cbom import export_cbom
     store = Store(args.db)
     run_id = args.run or store.latest_run_id()
     if run_id is None:
         print("no scan runs recorded yet", file=sys.stderr)
         return 1
-    doc = export_cbom(store.assets_for_run(run_id), store.run_info(run_id))
-    out = json.dumps(doc, indent=2)
-    if args.output == "-":
+    if args.html:
+        from .dashboard.html import render_dashboard
+        out = render_dashboard(store, run_id)
+        path = ("qday-report.html" if args.output == "cbom.json"
+                else args.output)
+        kind = "HTML report"
+    else:
+        from .cbom import export_cbom
+        doc = export_cbom(store.assets_for_run(run_id),
+                          store.run_info(run_id))
+        out = json.dumps(doc, indent=2)
+        path = args.output
+        kind = "CycloneDX CBOM"
+    if path == "-":
         print(out)
     else:
-        with open(args.output, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write(out + "\n")
-        print(f"wrote CycloneDX CBOM to {args.output}")
+        print(f"wrote {kind} to {path}")
     return 0
 
 
@@ -317,8 +327,12 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--json", action="store_true")
     pr.set_defaults(fn=_cmd_report)
 
-    pe = sub.add_parser("export", help="export CycloneDX CBOM")
+    pe = sub.add_parser("export",
+                        help="export CycloneDX CBOM or static HTML report")
     pe.add_argument("--run", type=int, help="run id (default: latest)")
+    pe.add_argument("--html", action="store_true",
+                    help="write a single-file HTML report instead of a CBOM "
+                         "(default output: qday-report.html)")
     pe.add_argument("-o", "--output", default="cbom.json",
                     help="output file, or - for stdout")
     pe.set_defaults(fn=_cmd_export)

@@ -47,3 +47,22 @@ def test_dashboard_renders_burndown_card(cert_dir, tmp_path):
     html = render_dashboard(store)
     assert "Burndown projection" in html
     assert "at least two scan runs" in html
+
+
+def test_export_html_report(cert_dir, tmp_path, capsys, monkeypatch):
+    from qday.cli import main
+
+    db = str(tmp_path / "d.db")
+    assert main(["--db", db, "scan", "--certs", str(cert_dir)]) == 0
+    out_file = tmp_path / "report.html"
+    assert main(["--db", db, "export", "--html", "-o", str(out_file)]) == 0
+    html = out_file.read_text(encoding="utf-8")
+    assert "QDAY dashboard" in html
+    assert "Burndown projection" in html
+    assert "Highest-risk assets" in html
+
+    monkeypatch.chdir(tmp_path)
+    capsys.readouterr()
+    assert main(["--db", db, "export", "--html"]) == 0
+    assert "qday-report.html" in capsys.readouterr().out
+    assert (tmp_path / "qday-report.html").exists()

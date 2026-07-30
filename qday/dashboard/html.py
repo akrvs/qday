@@ -88,8 +88,8 @@ td.num { font-variant-numeric: tabular-nums; }
 """
 
 
-def render_dashboard(store: Store) -> str:
-    run_id = store.latest_run_id()
+def render_dashboard(store: Store, run_id: int | None = None) -> str:
+    run_id = run_id or store.latest_run_id()
     if run_id is None:
         return _page("<p>No scan runs yet. Run <code>qday scan</code>.</p>")
 

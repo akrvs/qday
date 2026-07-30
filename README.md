@@ -18,7 +18,7 @@
 ![category](https://img.shields.io/badge/category-Security%20%2F%20PQC-9cf)
 ![difficulty](https://img.shields.io/badge/difficulty-Hard-red)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![tests](https://img.shields.io/badge/tests-53%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-73%20passing-brightgreen)
 ![deps](https://img.shields.io/badge/runtime%20deps-2-brightgreen)
 
 ```
@@ -112,6 +112,9 @@ qday diff --fail-on-new high
 
 # CycloneDX 1.6 CBOM — cryptographic-asset components, audit-ready
 qday export -o cbom.json
+
+# Same data as a single-file HTML report - the dashboard, no server needed
+qday export --html -o report.html
 
 # Merge estates scanned by other tools: any CycloneDX CBOM becomes a run,
 # re-scored by the same risk model, visible on the same dashboard
