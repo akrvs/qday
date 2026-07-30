@@ -20,6 +20,7 @@ _CDX_ASSET_TYPE = {
     "certificate": "certificate",
     "key-material": "related-crypto-material",
     "tls-endpoint": "protocol",
+    "ssh-endpoint": "protocol",
     "code-finding": "algorithm",
     "dependency": "algorithm",
 }

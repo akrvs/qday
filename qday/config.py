@@ -51,6 +51,7 @@ def load_config(path: str | Path) -> dict:
                     f"{[e.value for e in Exposure]}, got {ann['exposure']!r}")
     return {
         "tls": list(scan.get("tls", [])),
+        "ssh": list(scan.get("ssh", [])),
         "certs": list(scan.get("certs", [])),
         "code": list(scan.get("code", [])),
         "deps": list(scan.get("deps", [])),

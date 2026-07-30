@@ -54,6 +54,8 @@ live feed of your climb from 0% to 100% PQC-safe.
 tls        live handshake: protocol version, cipher suite, negotiated
            key-exchange group (PQC hybrids like X25519MLKEM768 count as
            safe), served certificate (algorithm, key size, curve, expiry)
+ssh        live banner + KEXINIT read: key-exchange list (hybrid PQC kex
+           like sntrup761x25519 counts as safe) and host key algorithms
 certs      X.509 certs and key material on disk: PEM/DER/OpenSSH,
            public + private keys, encrypted-key detection
 code       crypto API calls with key sizes across Python / Java / Kotlin /
@@ -67,6 +69,7 @@ agility    your own crypto-agility policy bindings (purpose -> suite)
 | Scanner | Ground truth level | Lie detector |
 |---|---|---|
 | `--tls` / `--discover` | **Negotiated reality** | what the endpoint actually serves (full chain: leaf/intermediate/root), verification off — expired and self-signed included |
+| `--ssh` | **Negotiated reality** | banner and cleartext KEXINIT — no authentication, no key exchange performed |
 | `--certs` | **Artifact on disk**   | what's deployed and what's leaked into repos |
 | `--code`  | **Heuristic**          | breadth over depth — `file:line` evidence for humans to triage, not CodeQL |
 | `--deps`  | **Manifest**           | requirements.txt · package-lock.json · go.mod · Cargo.lock · pom.xml → known crypto libraries |
@@ -89,8 +92,8 @@ the dashboard runs air-gapped.
 ```sh
 # Scan any mix of targets; each scan appends a run.
 # TLS endpoints scan in parallel and inventory the full served chain.
-qday scan --tls api.example.com:443 --certs /etc/ssl \
-          --code ~/repos/backend --deps ~/repos/backend
+qday scan --tls api.example.com:443 --ssh bastion.example.com \
+          --certs /etc/ssl --code ~/repos/backend --deps ~/repos/backend
 
 # Discover what's actually listening, then TLS-scan the live ones
 qday scan --discover 10.0.0.0/28:443,8443
@@ -122,6 +125,7 @@ where the humans feed the risk model what no scanner can discover:
 ```toml
 [scan]
 tls   = ["api.example.com:443", "vpn.example.com:8443"]
+ssh   = ["bastion.example.com:22"]
 certs = ["/etc/ssl"]
 code  = ["../backend"]
 deps  = ["../backend"]

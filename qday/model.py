@@ -15,6 +15,7 @@ from enum import Enum
 class AssetType(str, Enum):
     CERTIFICATE = "certificate"
     TLS_ENDPOINT = "tls-endpoint"
+    SSH_ENDPOINT = "ssh-endpoint"
     KEY_MATERIAL = "key-material"
     CODE_FINDING = "code-finding"
     DEPENDENCY = "dependency"

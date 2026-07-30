@@ -1,6 +1,7 @@
 """Command-line entry point.
 
-    qday scan  [--tls HOST[:PORT] ...] [--discover HOST|CIDR[:PORTS] ...]
+    qday scan  [--tls HOST[:PORT] ...] [--ssh HOST[:PORT] ...]
+               [--discover HOST|CIDR[:PORTS] ...]
                [--certs DIR] [--code DIR] [--deps DIR] [--agility TOML]
                [--config qday.toml] [--fail-on LEVEL]
     qday report [--run ID] [--json]
@@ -26,10 +27,26 @@ DEFAULT_DB = "data/qday.db"
 _LEVEL_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 
+def _parse_endpoints(targets: list[str], default_port: int,
+                     kind: str) -> list[tuple[str, int]] | None:
+    endpoints: list[tuple[str, int]] = []
+    for target in targets:
+        host, _, port = target.partition(":")
+        port_num = int(port) if port.isdigit() else (
+            default_port if not port else 0)
+        if not host or not 0 < port_num < 65536:
+            print(f"invalid {kind} target {target!r}: expected HOST[:PORT]",
+                  file=sys.stderr)
+            return None
+        endpoints.append((host, port_num))
+    return endpoints
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     from .config import DEFAULT_CONFIG, ConfigError, load_config
 
     tls_targets = list(args.tls or [])
+    ssh_targets = list(args.ssh or [])
     cert_dirs = list(args.certs or [])
     code_dirs = list(args.code or [])
     dep_dirs = list(args.deps or [])
@@ -46,6 +63,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             print(f"config error: {exc}", file=sys.stderr)
             return 2
         tls_targets += cfg["tls"]
+        ssh_targets += cfg["ssh"]
         cert_dirs += cfg["certs"]
         code_dirs += cfg["code"]
         dep_dirs += cfg["deps"]
@@ -63,30 +81,32 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(f"discovery: {len(live)} live endpoint(s) found")
         tls_targets += live
 
-    if not (tls_targets or cert_dirs or code_dirs or dep_dirs
+    if not (tls_targets or ssh_targets or cert_dirs or code_dirs or dep_dirs
             or agility_files):
-        print("nothing to scan: pass --tls/--certs/--code/--deps/--agility "
-              "or add a [scan] section to qday.toml", file=sys.stderr)
+        print("nothing to scan: pass --tls/--ssh/--certs/--code/--deps/"
+              "--agility or add a [scan] section to qday.toml",
+              file=sys.stderr)
         return 2
 
     assets: list[CryptoAsset] = []
     if tls_targets:
         from .scanners.tls import TlsScanner
-
-        endpoints: list[tuple[str, int]] = []
-        for target in tls_targets:
-            host, _, port = target.partition(":")
-            port_num = int(port) if port.isdigit() else (443 if not port else 0)
-            if not host or not 0 < port_num < 65536:
-                print(f"invalid TLS target {target!r}: expected HOST[:PORT]",
-                      file=sys.stderr)
-                return 2
-            endpoints.append((host, port_num))
-
+        endpoints = _parse_endpoints(tls_targets, 443, "TLS")
+        if endpoints is None:
+            return 2
         # Handshakes are network-bound; a pool turns N × timeout into ~timeout.
         with ThreadPoolExecutor(max_workers=min(16, len(endpoints))) as pool:
             for result in pool.map(
                     lambda hp: list(TlsScanner(*hp).scan()), endpoints):
+                assets.extend(result)
+    if ssh_targets:
+        from .scanners.ssh import SshScanner
+        endpoints = _parse_endpoints(ssh_targets, 22, "SSH")
+        if endpoints is None:
+            return 2
+        with ThreadPoolExecutor(max_workers=min(16, len(endpoints))) as pool:
+            for result in pool.map(
+                    lambda hp: list(SshScanner(*hp).scan()), endpoints):
                 assets.extend(result)
     if cert_dirs:
         from .scanners.certs import CertFileScanner
@@ -247,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
     ps = sub.add_parser("scan", help="run scanners and record a run")
     ps.add_argument("--tls", action="append", metavar="HOST[:PORT]",
                     help="scan a live TLS endpoint (repeatable)")
+    ps.add_argument("--ssh", action="append", metavar="HOST[:PORT]",
+                    help="scan a live SSH endpoint (repeatable)")
     ps.add_argument("--discover", action="append", metavar="HOST|CIDR[:PORTS]",
                     help="probe a host/CIDR + port list, scan what answers "
                          "(e.g. 10.0.0.0/28:443,8443)")
