@@ -41,6 +41,7 @@ class TlsScanner:
                 with ctx.wrap_socket(sock, server_hostname=self.host) as tls:
                     version = tls.version()
                     cipher = tls.cipher()  # (name, protocol, secret_bits)
+                    group = _negotiated_group(tls)
                     der = tls.getpeercert(binary_form=True)
                     chain_der = _peer_chain(tls)
         except (OSError, ssl.SSLError) as exc:
@@ -52,7 +53,16 @@ class TlsScanner:
             return
 
         cipher_name = cipher[0] if cipher else "unknown"
-        kex = _key_exchange_family(cipher_name, version)
+        details = {"tls_version": version, "cipher_suite": cipher_name}
+        if group:
+            kex = _group_family(group)
+            details["key_exchange_group"] = group
+        else:
+            kex = _key_exchange_family(cipher_name, version)
+            if version == "TLSv1.3":
+                details["key_exchange_note"] = (
+                    "negotiated group not exposed by this Python runtime; "
+                    "ECDH (x25519/P-256) assumed")
         yield CryptoAsset(
             name=f"TLS endpoint {location}",
             asset_type=AssetType.TLS_ENDPOINT,
@@ -60,14 +70,7 @@ class TlsScanner:
             location=location,
             scanner=self.name,
             exposure=self.exposure,
-            details={
-                "tls_version": version,
-                "cipher_suite": cipher_name,
-                "key_exchange_note": (
-                    "TLS 1.3 hides the negotiated group from the ssl module; "
-                    "ECDH (x25519/P-256) assumed" if version == "TLSv1.3"
-                    else ""),
-            },
+            details=details,
         )
 
         # Whole served chain: a PQC-migrated leaf under an RSA intermediate
@@ -108,6 +111,29 @@ def _peer_chain(tls: ssl.SSLSocket) -> list[bytes]:
     return [c if isinstance(c, bytes)
             else ssl.PEM_cert_to_DER_cert(c.public_bytes())
             for c in chain]
+
+
+def _negotiated_group(tls: ssl.SSLSocket) -> str | None:
+    getter = getattr(tls, "group", None)
+    if getter is None:
+        return None
+    try:
+        return getter()
+    except ssl.SSLError:
+        return None
+
+
+def _group_family(group: str) -> str:
+    g = group.lower()
+    if "mlkem" in g or "kyber" in g or "sntrup" in g or "frodo" in g:
+        return "PQC-HYBRID"
+    if "x25519" in g:
+        return "X25519"
+    if "x448" in g:
+        return "X448"
+    if g.startswith("ffdhe"):
+        return "DH"
+    return "ECDH"
 
 
 def _key_exchange_family(cipher_name: str, version: str | None) -> str:

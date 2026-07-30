@@ -51,8 +51,9 @@ live feed of your climb from 0% to 100% PQC-safe.
 ## [ Recon ] — what it finds
 
 ```
-tls        live handshake: protocol version, cipher suite, key exchange,
-           served certificate (algorithm, key size, curve, expiry)
+tls        live handshake: protocol version, cipher suite, negotiated
+           key-exchange group (PQC hybrids like X25519MLKEM768 count as
+           safe), served certificate (algorithm, key size, curve, expiry)
 certs      X.509 certs and key material on disk: PEM/DER/OpenSSH,
            public + private keys, encrypted-key detection
 code       crypto API calls with key sizes across Python / Java / Kotlin /

@@ -34,7 +34,8 @@ QUANTUM_VULNERABLE_FAMILIES = {
 }
 
 # NIST-standardized (or draft) post-quantum families.
-PQC_FAMILIES = {"ML-KEM", "ML-DSA", "SLH-DSA", "FN-DSA", "LMS", "XMSS", "HSS"}
+PQC_FAMILIES = {"ML-KEM", "ML-DSA", "SLH-DSA", "FN-DSA", "LMS", "XMSS", "HSS",
+                "PQC-HYBRID"}
 
 # Symmetric/hash primitives: only Grover-affected, acceptable at large sizes.
 SYMMETRIC_FAMILIES = {"AES", "CHACHA20", "3DES", "DES", "SHA-2", "SHA-3"}

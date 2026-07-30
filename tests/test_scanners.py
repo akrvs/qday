@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from qday.model import AssetType
 from qday.scanners.certs import CertFileScanner
-from qday.scanners.tls import TlsScanner
+from qday.scanners.tls import TlsScanner, _group_family
 
 from .conftest import make_self_signed
 
@@ -69,7 +69,7 @@ def test_tls_scanner_against_local_server(tmp_path):
     by_type = {a.asset_type: a for a in assets}
     endpoint = by_type[AssetType.TLS_ENDPOINT]
     assert endpoint.details["tls_version"].startswith("TLS")
-    assert endpoint.algorithm in {"ECDH", "DH", "RSA"}
+    assert endpoint.algorithm in {"ECDH", "DH", "RSA", "X25519", "PQC-HYBRID"}
     served = by_type[AssetType.CERTIFICATE]
     assert served.algorithm == "RSA" and served.key_size == 2048
     assert "localhost" in served.name
@@ -80,3 +80,13 @@ def test_tls_scanner_unreachable():
     (asset,) = TlsScanner("127.0.0.1", 1).scan()
     assert asset.algorithm == "UNKNOWN"
     assert "error" in asset.details
+
+
+def test_group_family_classification():
+    assert _group_family("X25519MLKEM768") == "PQC-HYBRID"
+    assert _group_family("SecP256r1MLKEM768") == "PQC-HYBRID"
+    assert _group_family("X25519Kyber768Draft00") == "PQC-HYBRID"
+    assert _group_family("x25519") == "X25519"
+    assert _group_family("x448") == "X448"
+    assert _group_family("secp384r1") == "ECDH"
+    assert _group_family("ffdhe2048") == "DH"

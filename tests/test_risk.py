@@ -35,6 +35,14 @@ def test_pqc_scores_zero():
     assert score == 0.0 and level == "none"
 
 
+def test_pqc_hybrid_kex_scores_zero():
+    a = asset(algorithm="PQC-HYBRID", exposure=Exposure.PUBLIC,
+              data_lifespan_years=25)
+    assert a.pqc_ready and not a.quantum_vulnerable
+    score, level = score_asset(a)
+    assert score == 0.0 and level == "none"
+
+
 def test_aes256_safe_aes128_flagged():
     safe, _ = score_asset(asset(algorithm="AES", key_size=256))
     weak, weak_level = score_asset(asset(algorithm="AES", key_size=128))
