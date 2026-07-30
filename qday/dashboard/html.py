@@ -7,7 +7,7 @@ page works air-gapped (the audience includes defense suppliers).
 from __future__ import annotations
 
 import html as _html
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from ..store import Store
 
@@ -177,7 +177,71 @@ def render_dashboard(store: Store) -> str:
     label = f" — {_esc(info['label'])}" if info["label"] else ""
     header = (f'<h1>QDAY <small>run {run_id}{label} · '
               f'{_esc(info["started_at"])}</small></h1>')
-    return _page(header + tiles + deadlines + dist + diff_card + table + trend)
+    return _page(header + tiles + deadlines + _burndown_card(hist) + dist
+                 + diff_card + table + trend)
+
+
+def project_completion(history: list[dict]) -> datetime | None:
+    points = []
+    for h in history:
+        if not h["total"]:
+            continue
+        t = datetime.fromisoformat(h["started_at"])
+        pct = 100.0 * (h["total"] - h["vulnerable"]) / h["total"]
+        points.append((t, pct))
+    if len(points) < 2:
+        return None
+    if points[-1][1] >= 100.0:
+        return points[-1][0]
+    t0 = points[0][0]
+    xs = [(t - t0).total_seconds() / 86400 for t, _ in points]
+    ys = [pct for _, pct in points]
+    n = len(points)
+    mean_x, mean_y = sum(xs) / n, sum(ys) / n
+    var = sum((x - mean_x) ** 2 for x in xs)
+    if var == 0:
+        return None
+    slope = sum((x - mean_x) * (y - mean_y)
+                for x, y in zip(xs, ys)) / var
+    if slope <= 0:
+        return None
+    intercept = mean_y - slope * mean_x
+    days = (100.0 - intercept) / slope
+    if days - xs[-1] > 40000:
+        return None
+    return t0 + timedelta(days=days)
+
+
+def _burndown_card(hist: list[dict]) -> str:
+    usable = [h for h in hist if h["total"]]
+    projected = project_completion(hist)
+    if len(usable) < 2:
+        body = ('<p class="footnote">Need at least two scan runs to fit a '
+                'migration trend.</p>')
+    elif projected is None:
+        body = ('<p class="footnote">No downward trend yet — the PQC-safe '
+                'share is flat or falling across runs.</p>')
+    else:
+        done = projected.date()
+        verdicts = []
+        for iso, what in DEADLINES:
+            d = date.fromisoformat(iso)
+            if done <= d:
+                verdicts.append(
+                    f'<div class="deadline"><div class="d" '
+                    f'style="color:{_RISK_COLOR["low"]}">meets {d.year}</div>'
+                    f'<div class="what">{_esc(what)}</div></div>')
+            else:
+                verdicts.append(
+                    f'<div class="deadline"><div class="d" '
+                    f'style="color:{_RISK_COLOR["critical"]}">misses {d.year} '
+                    f'by {(done - d).days:,} days</div>'
+                    f'<div class="what">{_esc(what)}</div></div>')
+        body = (f'<p>Projected 100% PQC-safe: <b>{done.isoformat()}</b> '
+                f'at the current pace.</p>'
+                f'<div class="deadlines" style="margin-top:10px">'
+                + "".join(verdicts) + "</div>")
+    return f'<div class="card"><h2>Burndown projection</h2>{body}</div>'
 
 
 def _diff_card(store: Store, hist: list[dict], run_id: int) -> str:

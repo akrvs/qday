@@ -117,7 +117,9 @@ qday export -o cbom.json
 # re-scored by the same risk model, visible on the same dashboard
 qday import other-tool-cbom.json
 
-# The scoreboard: % PQC-safe, deadline countdowns, risk breakdown, trend
+# The scoreboard: % PQC-safe, deadline countdowns, risk breakdown, trend,
+# and a burndown projection - the date you hit 100% PQC-safe at the current
+# pace, meets/misses per regulatory deadline
 qday serve --port 8080
 ```
 
