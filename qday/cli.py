@@ -10,7 +10,7 @@
     qday prune (--keep N | --older-than DAYS) [--dry-run]
     qday waivers [--config qday.toml]
     qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
-    qday export [--run ID] [--html | --csv] -o cbom.json
+    qday export [--run ID] [--html | --csv | --sarif] -o cbom.json
     qday import CBOM.json [--label TEXT]
     qday serve  [--port 8080]
 """
@@ -384,6 +384,12 @@ def _cmd_export(args: argparse.Namespace) -> int:
         path = ("qday-report.csv" if args.output == "cbom.json"
                 else args.output)
         kind = "CSV report"
+    elif args.sarif:
+        from .sarif import export_sarif
+        doc = export_sarif(store.assets_for_run(run_id))
+        out = json.dumps(doc, indent=2)
+        path = "qday.sarif" if args.output == "cbom.json" else args.output
+        kind = "SARIF report"
     else:
         from .cbom import export_cbom
         doc = export_cbom(store.assets_for_run(run_id),
@@ -508,6 +514,9 @@ def main(argv: list[str] | None = None) -> int:
     pfmt.add_argument("--csv", action="store_true",
                       help="write a CSV report instead of a CBOM "
                            "(default output: qday-report.csv)")
+    pfmt.add_argument("--sarif", action="store_true",
+                      help="write a SARIF 2.1.0 report instead of a CBOM "
+                           "(default output: qday.sarif)")
     pe.add_argument("-o", "--output", default="cbom.json",
                     help="output file, or - for stdout")
     pe.set_defaults(fn=_cmd_export)
