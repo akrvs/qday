@@ -8,6 +8,7 @@
     qday runs  [--json]
     qday trend [--json]
     qday prune (--keep N | --older-than DAYS) [--dry-run]
+    qday waivers [--config qday.toml]
     qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
     qday export [--run ID] -o cbom.json
     qday import CBOM.json [--label TEXT]
@@ -304,6 +305,45 @@ def _cmd_prune(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_waivers(args: argparse.Namespace) -> int:
+    from datetime import date
+    from fnmatch import fnmatch
+
+    from .config import DEFAULT_CONFIG, ConfigError, load_config
+
+    config_path = args.config
+    if config_path is None and os.path.exists(DEFAULT_CONFIG):
+        config_path = DEFAULT_CONFIG
+    if config_path is None:
+        print("no config found: pass --config or add qday.toml",
+              file=sys.stderr)
+        return 2
+    try:
+        cfg = load_config(config_path)
+    except (OSError, ConfigError) as exc:
+        print(f"config error: {exc}", file=sys.stderr)
+        return 2
+    waivers = cfg["waivers"]
+    if not waivers:
+        print("no waivers defined")
+        return 0
+
+    store = Store(args.db)
+    latest = store.latest_run_id()
+    locations = ([r["location"] for r in store.assets_for_run(latest)]
+                 if latest else [])
+    today = date.today()
+    fmt = "{:<8} {:<11} {:>6} {:>7}  {:<28} {}"
+    print(fmt.format("STATUS", "UNTIL", "DAYS", "ASSETS", "MATCH", "REASON"))
+    for w in waivers:
+        days = (w["until"] - today).days
+        status = "ACTIVE" if days >= 0 else "EXPIRED"
+        hits = sum(1 for loc in locations if fnmatch(loc, w["match"]))
+        print(fmt.format(status, w["until"].isoformat(), days, hits,
+                         w["match"], w["reason"]))
+    return 0
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     store = Store(args.db)
     run_id = args.run or store.latest_run_id()
@@ -420,6 +460,12 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("--dry-run", action="store_true",
                     help="print what would be deleted without deleting")
     pp.set_defaults(fn=_cmd_prune)
+
+    pw = sub.add_parser("waivers",
+                        help="list configured waivers and their status")
+    pw.add_argument("--config", metavar="TOML",
+                    help="scan config (default: qday.toml if present)")
+    pw.set_defaults(fn=_cmd_waivers)
 
     pe = sub.add_parser("export",
                         help="export CycloneDX CBOM or static HTML report")

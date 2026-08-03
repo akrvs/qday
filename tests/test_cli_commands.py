@@ -66,6 +66,30 @@ def test_prune_older_than_and_nothing(tmp_path, capsys):
     assert Store(db).run_history() == []
 
 
+def test_waivers_status_and_hits(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    seed_run(db)
+    cfg = tmp_path / "qday.toml"
+    cfg.write_text(
+        '[[waive]]\nmatch = "certs/*"\nreason = "migrating"\n'
+        'until = 2099-01-01\n'
+        '[[waive]]\nmatch = "other/*"\nreason = "gone"\nuntil = 2020-01-01\n')
+    assert main(["--db", db, "waivers", "--config", str(cfg)]) == 0
+    out = capsys.readouterr().out
+    active = next(line for line in out.splitlines() if "certs/*" in line)
+    expired = next(line for line in out.splitlines() if "other/*" in line)
+    assert active.split()[:1] + active.split()[3:4] == ["ACTIVE", "2"]
+    assert expired.split()[:1] + expired.split()[3:4] == ["EXPIRED", "0"]
+
+
+def test_waivers_none_defined(tmp_path, capsys):
+    cfg = tmp_path / "qday.toml"
+    cfg.write_text("[scan]\n")
+    db = str(tmp_path / "t.db")
+    assert main(["--db", db, "waivers", "--config", str(cfg)]) == 0
+    assert "no waivers defined" in capsys.readouterr().out
+
+
 def test_trend_bar_and_json(tmp_path, capsys):
     db = str(tmp_path / "t.db")
     seed_run(db)
