@@ -45,6 +45,27 @@ def test_runs_empty_db(tmp_path):
     assert main(["--db", str(tmp_path / "t.db"), "runs"]) == 1
 
 
+def test_prune_keep(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    ids = [seed_run(db) for _ in range(3)]
+    assert main(["--db", db, "prune", "--keep", "1", "--dry-run"]) == 0
+    assert "would delete 2" in capsys.readouterr().out
+    assert len(Store(db).run_history()) == 3
+    assert main(["--db", db, "prune", "--keep", "1"]) == 0
+    history = Store(db).run_history()
+    assert [h["id"] for h in history] == [ids[-1]]
+    assert Store(db).assets_for_run(ids[0]) == []
+
+
+def test_prune_older_than_and_nothing(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    seed_run(db)
+    assert main(["--db", db, "prune", "--older-than", "30"]) == 0
+    assert "nothing to prune" in capsys.readouterr().out
+    assert main(["--db", db, "prune", "--older-than", "0"]) == 0
+    assert Store(db).run_history() == []
+
+
 def test_trend_bar_and_json(tmp_path, capsys):
     db = str(tmp_path / "t.db")
     seed_run(db)

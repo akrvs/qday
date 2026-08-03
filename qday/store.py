@@ -101,6 +101,13 @@ class Store:
             "persisting": [r for aid, r in new.items() if aid in old],
         }
 
+    def delete_runs(self, run_ids: list[int]) -> None:
+        qs = ", ".join("?" * len(run_ids))
+        self._con.execute(
+            f"DELETE FROM assets WHERE run_id IN ({qs})", run_ids)
+        self._con.execute(f"DELETE FROM runs WHERE id IN ({qs})", run_ids)
+        self._con.commit()
+
     def run_history(self) -> list[dict]:
         """Per-run summary for trend lines: total assets, vulnerable count."""
         rows = self._con.execute(

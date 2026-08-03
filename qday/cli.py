@@ -7,6 +7,7 @@
     qday report [--run ID] [--json]
     qday runs  [--json]
     qday trend [--json]
+    qday prune (--keep N | --older-than DAYS) [--dry-run]
     qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
     qday export [--run ID] -o cbom.json
     qday import CBOM.json [--label TEXT]
@@ -276,6 +277,33 @@ def _cmd_trend(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_prune(args: argparse.Namespace) -> int:
+    if (args.keep is not None and args.keep < 0) or \
+            (args.older_than is not None and args.older_than < 0):
+        print("prune: value must be >= 0", file=sys.stderr)
+        return 2
+    store = Store(args.db)
+    history = store.run_history()
+    if args.keep is not None:
+        doomed = history[:-args.keep] if args.keep else history
+    else:
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(days=args.older_than)
+        doomed = [h for h in history
+                  if datetime.fromisoformat(h["started_at"]) < cutoff]
+    if not doomed:
+        print("nothing to prune")
+        return 0
+    ids = [h["id"] for h in doomed]
+    listing = ", ".join(str(i) for i in ids)
+    if args.dry_run:
+        print(f"would delete {len(ids)} run(s): {listing}")
+        return 0
+    store.delete_runs(ids)
+    print(f"deleted {len(ids)} run(s): {listing}")
+    return 0
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     store = Store(args.db)
     run_id = args.run or store.latest_run_id()
@@ -382,6 +410,16 @@ def main(argv: list[str] | None = None) -> int:
     pt = sub.add_parser("trend", help="print PQC-safe percentage per run")
     pt.add_argument("--json", action="store_true")
     pt.set_defaults(fn=_cmd_trend)
+
+    pp = sub.add_parser("prune", help="delete old runs from the database")
+    sel = pp.add_mutually_exclusive_group(required=True)
+    sel.add_argument("--keep", type=int, metavar="N",
+                     help="keep only the last N runs")
+    sel.add_argument("--older-than", type=int, metavar="DAYS",
+                     help="delete runs older than DAYS days")
+    pp.add_argument("--dry-run", action="store_true",
+                    help="print what would be deleted without deleting")
+    pp.set_defaults(fn=_cmd_prune)
 
     pe = sub.add_parser("export",
                         help="export CycloneDX CBOM or static HTML report")
