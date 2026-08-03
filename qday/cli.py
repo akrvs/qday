@@ -1,6 +1,7 @@
 """Command-line entry point.
 
     qday scan  [--tls HOST[:PORT] ...] [--ssh HOST[:PORT] ...]
+               [--starttls PROTO:HOST[:PORT] ...]
                [--discover HOST|CIDR[:PORTS] ...]
                [--certs DIR] [--code DIR] [--deps DIR] [--agility TOML]
                [--config qday.toml] [--fail-on LEVEL] [--fail-under PCT]
@@ -30,6 +31,8 @@ DEFAULT_DB = "data/qday.db"
 
 _LEVEL_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
+_STARTTLS_PORTS = {"smtp": 587, "imap": 143, "pop3": 110}
+
 
 def _parse_endpoints(targets: list[str], default_port: int,
                      kind: str) -> list[tuple[str, int]] | None:
@@ -46,11 +49,29 @@ def _parse_endpoints(targets: list[str], default_port: int,
     return endpoints
 
 
+def _parse_starttls(targets: list[str]) -> list[tuple[str, int, str]] | None:
+    triples: list[tuple[str, int, str]] = []
+    for target in targets:
+        proto, _, rest = target.partition(":")
+        proto = proto.lower()
+        if proto not in _STARTTLS_PORTS or not rest:
+            print(f"invalid starttls target {target!r}: expected "
+                  "smtp|imap|pop3:HOST[:PORT]", file=sys.stderr)
+            return None
+        endpoints = _parse_endpoints([rest], _STARTTLS_PORTS[proto],
+                                     "STARTTLS")
+        if endpoints is None:
+            return None
+        triples.append((*endpoints[0], proto))
+    return triples
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     from .config import DEFAULT_CONFIG, ConfigError, load_config
 
     tls_targets = list(args.tls or [])
     ssh_targets = list(args.ssh or [])
+    starttls_targets = list(args.starttls or [])
     cert_dirs = list(args.certs or [])
     code_dirs = list(args.code or [])
     dep_dirs = list(args.deps or [])
@@ -69,6 +90,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             return 2
         tls_targets += cfg["tls"]
         ssh_targets += cfg["ssh"]
+        starttls_targets += cfg["starttls"]
         cert_dirs += cfg["certs"]
         code_dirs += cfg["code"]
         dep_dirs += cfg["deps"]
@@ -87,10 +109,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(f"discovery: {len(live)} live endpoint(s) found")
         tls_targets += live
 
-    if not (tls_targets or ssh_targets or cert_dirs or code_dirs or dep_dirs
-            or agility_files):
-        print("nothing to scan: pass --tls/--ssh/--certs/--code/--deps/"
-              "--agility or add a [scan] section to qday.toml",
+    if not (tls_targets or ssh_targets or starttls_targets or cert_dirs
+            or code_dirs or dep_dirs or agility_files):
+        print("nothing to scan: pass --tls/--ssh/--starttls/--certs/--code/"
+              "--deps/--agility or add a [scan] section to qday.toml",
               file=sys.stderr)
         return 2
 
@@ -104,6 +126,17 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         with ThreadPoolExecutor(max_workers=min(16, len(endpoints))) as pool:
             for result in pool.map(
                     lambda hp: list(TlsScanner(*hp).scan()), endpoints):
+                assets.extend(result)
+    if starttls_targets:
+        from .scanners.tls import TlsScanner
+        triples = _parse_starttls(starttls_targets)
+        if triples is None:
+            return 2
+        with ThreadPoolExecutor(max_workers=min(16, len(triples))) as pool:
+            for result in pool.map(
+                    lambda hpp: list(TlsScanner(hpp[0], hpp[1],
+                                                starttls=hpp[2]).scan()),
+                    triples):
                 assets.extend(result)
     if ssh_targets:
         from .scanners.ssh import SshScanner
@@ -442,6 +475,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="scan a live TLS endpoint (repeatable)")
     ps.add_argument("--ssh", action="append", metavar="HOST[:PORT]",
                     help="scan a live SSH endpoint (repeatable)")
+    ps.add_argument("--starttls", action="append",
+                    metavar="PROTO:HOST[:PORT]",
+                    help="scan a STARTTLS endpoint, PROTO one of smtp/imap/"
+                         "pop3 (repeatable)")
     ps.add_argument("--discover", action="append", metavar="HOST|CIDR[:PORTS]",
                     help="probe a host/CIDR + port list, scan what answers "
                          "(e.g. 10.0.0.0/28:443,8443)")

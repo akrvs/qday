@@ -24,10 +24,12 @@ class TlsScanner:
     name = "tls"
 
     def __init__(self, host: str, port: int = 443,
-                 exposure: Exposure = Exposure.PUBLIC):
+                 exposure: Exposure = Exposure.PUBLIC,
+                 starttls: str | None = None):
         self.host = host
         self.port = port
         self.exposure = exposure
+        self.starttls = starttls  # "smtp" | "imap" | "pop3" | None
 
     def scan(self) -> Iterator[CryptoAsset]:
         location = f"{self.host}:{self.port}"
@@ -38,6 +40,8 @@ class TlsScanner:
         try:
             with socket.create_connection((self.host, self.port),
                                           timeout=_TIMEOUT) as sock:
+                if self.starttls:
+                    _starttls_dialog(sock, self.starttls)
                 with ctx.wrap_socket(sock, server_hostname=self.host) as tls:
                     version = tls.version()
                     cipher = tls.cipher()  # (name, protocol, secret_bits)
@@ -54,6 +58,8 @@ class TlsScanner:
 
         cipher_name = cipher[0] if cipher else "unknown"
         details = {"tls_version": version, "cipher_suite": cipher_name}
+        if self.starttls:
+            details["starttls"] = self.starttls
         if group:
             kex = _group_family(group)
             details["key_exchange_group"] = group
@@ -96,6 +102,46 @@ class TlsScanner:
                     "signature_algorithm": cert.signature_algorithm_oid._name,
                 },
             )
+
+
+def _starttls_dialog(sock: socket.socket, proto: str) -> None:
+    """Plaintext pre-dialog that upgrades an SMTP/IMAP/POP3 connection to
+    TLS. Raises OSError on refusal so the caller records an unreachable
+    endpoint. Reads stop exactly at the upgrade reply, so no TLS bytes are
+    swallowed by the line buffer (same approach as smtplib/imaplib)."""
+    reader = sock.makefile("rb")
+
+    def smtp_reply() -> bytes:
+        while True:
+            line = reader.readline()
+            if not line or line[3:4] != b"-":  # "250-" continues, "250 " ends
+                return line
+
+    if proto == "smtp":
+        smtp_reply()
+        sock.sendall(b"EHLO qday.invalid\r\n")
+        smtp_reply()
+        sock.sendall(b"STARTTLS\r\n")
+        reply = smtp_reply()
+        if not reply.startswith(b"220"):
+            raise OSError(f"STARTTLS refused: {reply[:80]!r}")
+    elif proto == "imap":
+        reader.readline()
+        sock.sendall(b"q1 STARTTLS\r\n")
+        while True:
+            line = reader.readline()
+            if not line or line.startswith(b"q1 "):
+                if not line.startswith(b"q1 OK"):
+                    raise OSError(f"STARTTLS refused: {line[:80]!r}")
+                return
+    elif proto == "pop3":
+        reader.readline()
+        sock.sendall(b"STLS\r\n")
+        reply = reader.readline()
+        if not reply.startswith(b"+OK"):
+            raise OSError(f"STLS refused: {reply[:80]!r}")
+    else:
+        raise OSError(f"unsupported STARTTLS protocol {proto!r}")
 
 
 def _peer_chain(tls: ssl.SSLSocket) -> list[bytes]:

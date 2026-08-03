@@ -72,6 +72,7 @@ def load_config(path: str | Path) -> dict:
     return {
         "tls": list(scan.get("tls", [])),
         "ssh": list(scan.get("ssh", [])),
+        "starttls": list(scan.get("starttls", [])),
         "certs": list(scan.get("certs", [])),
         "code": list(scan.get("code", [])),
         "deps": list(scan.get("deps", [])),
