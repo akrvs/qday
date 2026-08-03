@@ -5,6 +5,7 @@
                [--certs DIR] [--code DIR] [--deps DIR] [--agility TOML]
                [--config qday.toml] [--fail-on LEVEL]
     qday report [--run ID] [--json]
+    qday runs  [--json]
     qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
     qday export [--run ID] -o cbom.json
     qday import CBOM.json [--label TEXT]
@@ -228,6 +229,30 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_runs(args: argparse.Namespace) -> int:
+    store = Store(args.db)
+    history = store.run_history()
+    if not history:
+        print("no scan runs recorded yet — run `qday scan` first",
+              file=sys.stderr)
+        return 1
+    for h in history:
+        h["safe_pct"] = round(
+            100.0 * (h["total"] - h["vulnerable"]) / h["total"], 1) \
+            if h["total"] else 0.0
+    if args.json:
+        print(json.dumps(history, indent=2))
+        return 0
+    fmt = "{:<5} {:<21} {:>7} {:>11} {:>6}  {}"
+    print(fmt.format("RUN", "STARTED", "ASSETS", "VULNERABLE", "SAFE%",
+                     "LABEL"))
+    for h in history:
+        print(fmt.format(h["id"], h["started_at"], h["total"],
+                         h["vulnerable"], f"{h['safe_pct']:.1f}",
+                         h["label"] or "-"))
+    return 0
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     store = Store(args.db)
     run_id = args.run or store.latest_run_id()
@@ -326,6 +351,10 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--run", type=int, help="run id (default: latest)")
     pr.add_argument("--json", action="store_true")
     pr.set_defaults(fn=_cmd_report)
+
+    pl = sub.add_parser("runs", help="list recorded runs")
+    pl.add_argument("--json", action="store_true")
+    pl.set_defaults(fn=_cmd_runs)
 
     pe = sub.add_parser("export",
                         help="export CycloneDX CBOM or static HTML report")
