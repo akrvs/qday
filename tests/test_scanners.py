@@ -64,6 +64,33 @@ def test_pkcs12_encrypted_keystore(tmp_path):
     assert asset.details["container"] == "pkcs12"
 
 
+def test_ssh_key_files(tmp_path):
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    rsa_pub = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048).public_key().public_bytes(
+        serialization.Encoding.OpenSSH,
+        serialization.PublicFormat.OpenSSH).decode()
+    ed_pub = ed25519.Ed25519PrivateKey.generate().public_key().public_bytes(
+        serialization.Encoding.OpenSSH,
+        serialization.PublicFormat.OpenSSH).decode()
+
+    (tmp_path / "authorized_keys").write_text(
+        "# admins\n"
+        f'command="/bin/true",no-pty {rsa_pub} ops@example\n'
+        f"{ed_pub} dev@example\n"
+        "not a key line\n")
+    (tmp_path / "known_hosts").write_text(
+        f"github.com,140.82.121.3 {ed_pub}\n")
+
+    assets = sorted(CertFileScanner(tmp_path).scan(),
+                    key=lambda a: a.location)
+    assert [a.algorithm for a in assets] == ["RSA", "EdDSA", "EdDSA"]
+    assert assets[0].location == "authorized_keys:2"
+    assert assets[0].key_size == 2048
+    assert assets[2].details["source"] == "known_hosts"
+
+
 def test_tls_scanner_against_local_server(tmp_path):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     cert = make_self_signed(key, "localhost")
