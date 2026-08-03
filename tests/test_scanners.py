@@ -4,6 +4,7 @@ import threading
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import pkcs12
 
 from qday.model import AssetType
 from qday.scanners.certs import CertFileScanner
@@ -32,6 +33,35 @@ def test_cert_scanner_prunes_skip_dirs(cert_dir):
     skipped.mkdir()
     (skipped / "copy.crt").write_bytes((cert_dir / "server.crt").read_bytes())
     assert len(list(CertFileScanner(cert_dir).scan())) == 2
+
+
+def test_pkcs12_keystore(tmp_path):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cert = make_self_signed(key, "p12.test")
+    blob = pkcs12.serialize_key_and_certificates(
+        b"srv", key, cert, None, serialization.NoEncryption())
+    (tmp_path / "store.p12").write_bytes(blob)
+
+    assets = list(CertFileScanner(tmp_path).scan())
+    by_type = {a.asset_type: a for a in assets}
+    assert len(assets) == 2
+    assert by_type[AssetType.KEY_MATERIAL].algorithm == "RSA"
+    assert by_type[AssetType.KEY_MATERIAL].details["container"] == "pkcs12"
+    assert by_type[AssetType.CERTIFICATE].key_size == 2048
+
+
+def test_pkcs12_encrypted_keystore(tmp_path):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cert = make_self_signed(key, "p12.test")
+    blob = pkcs12.serialize_key_and_certificates(
+        b"srv", key, cert, None,
+        serialization.BestAvailableEncryption(b"hunter2"))
+    (tmp_path / "locked.pfx").write_bytes(blob)
+
+    (asset,) = CertFileScanner(tmp_path).scan()
+    assert asset.algorithm == "UNKNOWN"
+    assert asset.details["encrypted"] is True
+    assert asset.details["container"] == "pkcs12"
 
 
 def test_tls_scanner_against_local_server(tmp_path):
