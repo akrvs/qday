@@ -48,6 +48,9 @@ class DepScanner:
         "Cargo.lock": ("cargo", "_parse_cargo_lock"),
         "Cargo.toml": ("cargo", "_parse_cargo_toml"),
         "pom.xml": ("maven", "_parse_pom"),
+        "composer.lock": ("composer", "_parse_composer_lock"),
+        "Gemfile.lock": ("rubygems", "_parse_gemfile_lock"),
+        "packages.lock.json": ("nuget", "_parse_packages_lock"),
     }
 
     def __init__(self, root: str | Path):
@@ -147,6 +150,34 @@ class DepScanner:
             for name, spec in (doc.get(section) or {}).items():
                 ver = spec if isinstance(spec, str) else spec.get("version")
                 out.append((name, ver))
+        return out
+
+    def _parse_composer_lock(self, path: Path) -> list[tuple[str, str | None]]:
+        doc = json.loads(path.read_text())
+        out = []
+        for section in ("packages", "packages-dev"):
+            for p in doc.get(section) or []:
+                out.append((p.get("name", "").lower(), p.get("version")))
+        return out
+
+    def _parse_gemfile_lock(self, path: Path) -> list[tuple[str, str | None]]:
+        # Pinned gems sit at exactly 4-space indent under "specs:"; deeper
+        # lines are version constraints of transitive deps, not pins.
+        out = []
+        for line in path.read_text(errors="ignore").splitlines():
+            m = re.match(r"^ {4}([A-Za-z0-9_.-]+) \(([^()]*)\)\s*$", line)
+            if m:
+                out.append((m.group(1).lower(), m.group(2)))
+        return out
+
+    def _parse_packages_lock(self, path: Path) -> list[tuple[str, str | None]]:
+        # NuGet lockfile: dependencies keyed by target framework. Package
+        # names are case-insensitive, so normalize to lower.
+        doc = json.loads(path.read_text())
+        out = []
+        for tfm in (doc.get("dependencies") or {}).values():
+            for name, meta in (tfm or {}).items():
+                out.append((name.lower(), (meta or {}).get("resolved")))
         return out
 
     def _parse_pom(self, path: Path) -> list[tuple[str, str | None]]:

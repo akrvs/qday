@@ -72,6 +72,45 @@ def test_dep_scanner_across_ecosystems(manifests):
     assert not any("node_modules" in a.location for a in assets)
 
 
+def test_new_ecosystem_manifests(tmp_path):
+    (tmp_path / "composer.lock").write_text(json.dumps({
+        "packages": [
+            {"name": "phpseclib/phpseclib", "version": "3.0.37"},
+            {"name": "monolog/monolog", "version": "3.5.0"},
+        ],
+        "packages-dev": [{"name": "firebase/php-jwt", "version": "6.10.0"}],
+    }))
+    (tmp_path / "Gemfile.lock").write_text(
+        "GEM\n"
+        "  remote: https://rubygems.org/\n"
+        "  specs:\n"
+        "    jwt (2.7.1)\n"
+        "    net-ssh (7.2.0)\n"
+        "      transitive-dep (>= 1.0)\n"
+        "    rails (7.1.2)\n")
+    (tmp_path / "packages.lock.json").write_text(json.dumps({
+        "version": 1,
+        "dependencies": {
+            "net8.0": {
+                "BouncyCastle.Cryptography": {"type": "Direct",
+                                              "resolved": "2.3.0"},
+                "Newtonsoft.Json": {"type": "Direct", "resolved": "13.0.3"},
+            },
+        },
+    }))
+
+    assets = list(DepScanner(tmp_path).scan())
+    found = {a.details["package"]: a for a in assets}
+    assert found["phpseclib/phpseclib"].algorithm == "RSA"
+    assert found["firebase/php-jwt"].details["version"] == "6.10.0"
+    assert found["jwt"].algorithm == "RSA"
+    assert found["net-ssh"].details["version"] == "7.2.0"
+    assert found["bouncycastle.cryptography"].algorithm == "RSA"
+    assert "monolog/monolog" not in found and "rails" not in found
+    assert "newtonsoft.json" not in found
+    assert "transitive-dep" not in found  # constraint line, not a pin
+
+
 def test_v2_lockfile_with_both_sections_not_duplicated(tmp_path):
     (tmp_path / "package-lock.json").write_text(json.dumps({
         "lockfileVersion": 2,

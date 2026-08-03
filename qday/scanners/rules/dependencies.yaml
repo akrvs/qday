@@ -40,3 +40,21 @@ cargo:
 maven:
   org.bouncycastle: RSA         # groupId prefix match
   com.nimbusds:nimbus-jose-jwt: RSA
+composer:
+  phpseclib/phpseclib: RSA
+  firebase/php-jwt: RSA
+  lcobucci/jwt: RSA
+  web-token/jwt-framework: RSA
+rubygems:
+  jwt: RSA                # RS256/ES256
+  net-ssh: RSA            # SSH: RSA/ECDSA/Ed25519 keys
+  rbnacl: X25519          # libsodium (Ed25519/X25519)
+  ed25519: EdDSA
+nuget:                    # names lowercased by the parser
+  bouncycastle: RSA
+  bouncycastle.cryptography: RSA
+  portable.bouncycastle: RSA
+  system.identitymodel.tokens.jwt: RSA
+  jose-jwt: RSA
+  ssh.net: RSA
+  nsec.cryptography: EdDSA
