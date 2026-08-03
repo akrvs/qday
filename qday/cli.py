@@ -6,6 +6,7 @@
                [--config qday.toml] [--fail-on LEVEL]
     qday report [--run ID] [--json]
     qday runs  [--json]
+    qday trend [--json]
     qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
     qday export [--run ID] -o cbom.json
     qday import CBOM.json [--label TEXT]
@@ -253,6 +254,28 @@ def _cmd_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_trend(args: argparse.Namespace) -> int:
+    store = Store(args.db)
+    history = store.run_history()
+    if not history:
+        print("no scan runs recorded yet — run `qday scan` first",
+              file=sys.stderr)
+        return 1
+    points = [{"id": h["id"], "started_at": h["started_at"],
+               "safe_pct": round(100.0 * (h["total"] - h["vulnerable"])
+                                 / h["total"], 1) if h["total"] else 0.0}
+              for h in history]
+    if args.json:
+        print(json.dumps(points, indent=2))
+        return 0
+    width = 40
+    for pt in points:
+        bar = "#" * round(pt["safe_pct"] / 100 * width)
+        print(f"run {pt['id']:<4} {pt['started_at']:<21} "
+              f"{pt['safe_pct']:>5.1f}% |{bar:<{width}}|")
+    return 0
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     store = Store(args.db)
     run_id = args.run or store.latest_run_id()
@@ -355,6 +378,10 @@ def main(argv: list[str] | None = None) -> int:
     pl = sub.add_parser("runs", help="list recorded runs")
     pl.add_argument("--json", action="store_true")
     pl.set_defaults(fn=_cmd_runs)
+
+    pt = sub.add_parser("trend", help="print PQC-safe percentage per run")
+    pt.add_argument("--json", action="store_true")
+    pt.set_defaults(fn=_cmd_trend)
 
     pe = sub.add_parser("export",
                         help="export CycloneDX CBOM or static HTML report")

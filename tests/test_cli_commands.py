@@ -43,3 +43,15 @@ def test_runs_json(tmp_path, capsys):
 
 def test_runs_empty_db(tmp_path):
     assert main(["--db", str(tmp_path / "t.db"), "runs"]) == 1
+
+
+def test_trend_bar_and_json(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    seed_run(db)
+    seed_run(db, assets=[make_asset(algorithm="ml-kem")])
+    assert main(["--db", db, "trend"]) == 0
+    out = capsys.readouterr().out
+    assert " 50.0% |" in out and "100.0% |" in out
+    assert main(["--db", db, "trend", "--json"]) == 0
+    points = json.loads(capsys.readouterr().out)
+    assert [p["safe_pct"] for p in points] == [50.0, 100.0]
