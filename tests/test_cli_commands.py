@@ -98,6 +98,20 @@ def test_scan_fail_under(tmp_path, cert_dir, capsys):
     assert main(args + ["--fail-under", "0"]) == 0
 
 
+def test_export_csv(tmp_path, capsys):
+    import csv
+
+    db = str(tmp_path / "t.db")
+    seed_run(db)
+    out_path = tmp_path / "report.csv"
+    assert main(["--db", db, "export", "--csv", "-o", str(out_path)]) == 0
+    rows = list(csv.DictReader(out_path.open(newline="")))
+    assert len(rows) == 2
+    rsa = next(r for r in rows if r["algorithm"] == "RSA")
+    assert rsa["quantum_vulnerable"] == "1"
+    assert "ML-DSA" in rsa["remediation"]
+
+
 def test_trend_bar_and_json(tmp_path, capsys):
     db = str(tmp_path / "t.db")
     seed_run(db)

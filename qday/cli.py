@@ -10,7 +10,7 @@
     qday prune (--keep N | --older-than DAYS) [--dry-run]
     qday waivers [--config qday.toml]
     qday diff  [--from ID] [--to ID] [--json] [--fail-on-new LEVEL]
-    qday export [--run ID] -o cbom.json
+    qday export [--run ID] [--html | --csv] -o cbom.json
     qday import CBOM.json [--label TEXT]
     qday serve  [--port 8080]
 """
@@ -363,6 +363,27 @@ def _cmd_export(args: argparse.Namespace) -> int:
         path = ("qday-report.html" if args.output == "cbom.json"
                 else args.output)
         kind = "HTML report"
+    elif args.csv:
+        import csv
+        import io
+
+        from .risk import remediation
+        columns = ["asset_id", "name", "asset_type", "algorithm", "key_size",
+                   "curve", "location", "scanner", "exposure",
+                   "data_lifespan_years", "quantum_vulnerable", "risk_score",
+                   "risk_level", "remediation"]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=columns,
+                                extrasaction="ignore", lineterminator="\n")
+        writer.writeheader()
+        for r in store.assets_for_run(run_id):
+            r["remediation"] = remediation(r["algorithm"], r["asset_type"],
+                                           r["key_size"])
+            writer.writerow(r)
+        out = buf.getvalue().rstrip("\n")
+        path = ("qday-report.csv" if args.output == "cbom.json"
+                else args.output)
+        kind = "CSV report"
     else:
         from .cbom import export_cbom
         doc = export_cbom(store.assets_for_run(run_id),
@@ -480,9 +501,13 @@ def main(argv: list[str] | None = None) -> int:
     pe = sub.add_parser("export",
                         help="export CycloneDX CBOM or static HTML report")
     pe.add_argument("--run", type=int, help="run id (default: latest)")
-    pe.add_argument("--html", action="store_true",
-                    help="write a single-file HTML report instead of a CBOM "
-                         "(default output: qday-report.html)")
+    pfmt = pe.add_mutually_exclusive_group()
+    pfmt.add_argument("--html", action="store_true",
+                      help="write a single-file HTML report instead of a CBOM "
+                           "(default output: qday-report.html)")
+    pfmt.add_argument("--csv", action="store_true",
+                      help="write a CSV report instead of a CBOM "
+                           "(default output: qday-report.csv)")
     pe.add_argument("-o", "--output", default="cbom.json",
                     help="output file, or - for stdout")
     pe.set_defaults(fn=_cmd_export)
