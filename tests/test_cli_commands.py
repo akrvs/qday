@@ -90,6 +90,14 @@ def test_waivers_none_defined(tmp_path, capsys):
     assert "no waivers defined" in capsys.readouterr().out
 
 
+def test_scan_fail_under(tmp_path, cert_dir, capsys):
+    db = str(tmp_path / "t.db")
+    args = ["--db", db, "scan", "--certs", str(cert_dir)]
+    assert main(args + ["--fail-under", "50"]) == 3
+    assert "fail-under=50" in capsys.readouterr().err
+    assert main(args + ["--fail-under", "0"]) == 0
+
+
 def test_trend_bar_and_json(tmp_path, capsys):
     db = str(tmp_path / "t.db")
     seed_run(db)

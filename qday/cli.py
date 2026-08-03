@@ -3,7 +3,7 @@
     qday scan  [--tls HOST[:PORT] ...] [--ssh HOST[:PORT] ...]
                [--discover HOST|CIDR[:PORTS] ...]
                [--certs DIR] [--code DIR] [--deps DIR] [--agility TOML]
-               [--config qday.toml] [--fail-on LEVEL]
+               [--config qday.toml] [--fail-on LEVEL] [--fail-under PCT]
     qday report [--run ID] [--json]
     qday runs  [--json]
     qday trend [--json]
@@ -159,6 +159,13 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         if worst >= threshold:
             print(f"fail-on={args.fail_on}: threshold met (exit 3)",
                   file=sys.stderr)
+            return 3
+
+    if args.fail_under is not None and assets:
+        safe_pct = 100.0 * (len(assets) - vulnerable) / len(assets)
+        if safe_pct < args.fail_under:
+            print(f"fail-under={args.fail_under:g}: only {safe_pct:.1f}% "
+                  "PQC-safe (exit 3)", file=sys.stderr)
             return 3
     return 0
 
@@ -426,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="scan config (default: qday.toml if present)")
     ps.add_argument("--fail-on", choices=list(_LEVEL_RANK),
                     help="exit 3 if any asset reaches this risk level "
+                         "(CI gate)")
+    ps.add_argument("--fail-under", type=float, metavar="PCT",
+                    help="exit 3 if the PQC-safe percentage is below PCT "
                          "(CI gate)")
     ps.set_defaults(fn=_cmd_scan)
 
