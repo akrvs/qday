@@ -58,6 +58,9 @@ def _expand_ports(port_part: str) -> list[int]:
             ports.extend(range(lo_i, hi_i + 1))
         elif chunk:
             ports.append(int(chunk))
+    for port in ports:
+        if not 0 < port < 65536:
+            raise DiscoveryError(f"port out of range in {port_part!r}")
     return ports
 
 
