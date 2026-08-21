@@ -102,6 +102,8 @@ class Store:
         }
 
     def delete_runs(self, run_ids: list[int]) -> None:
+        if not run_ids:
+            return
         qs = ", ".join("?" * len(run_ids))
         self._con.execute(
             f"DELETE FROM assets WHERE run_id IN ({qs})", run_ids)
