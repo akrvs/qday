@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 from typing import Iterator
@@ -40,6 +41,11 @@ class Rule:
 
 def load_rules() -> tuple[dict[str, list[Rule]], list[Rule]]:
     """Return (rules by file extension, generic rules for all files)."""
+    return _load_rules()
+
+
+@lru_cache(maxsize=1)
+def _load_rules() -> tuple[dict[str, list[Rule]], list[Rule]]:
     by_ext: dict[str, list[Rule]] = {}
     generic: list[Rule] = []
     rule_dir = resources.files("qday.scanners") / "rules"

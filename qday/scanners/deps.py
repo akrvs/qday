@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 from typing import Iterator
@@ -30,6 +31,7 @@ _SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__",
 _MAX_FILE_BYTES = 5_000_000
 
 
+@lru_cache(maxsize=1)
 def load_catalog() -> dict[str, dict[str, str]]:
     path = resources.files("qday.scanners") / "rules" / "dependencies.yaml"
     return yaml.safe_load(path.read_text())
