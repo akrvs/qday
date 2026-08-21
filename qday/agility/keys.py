@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import tempfile
 from dataclasses import dataclass
 
 
@@ -36,10 +37,15 @@ class AgileKey:
 
     def to_file(self, path, provider) -> None:
         mode = 0o600 if self.is_private else 0o644
-        flags = (os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-                 | getattr(os, "O_BINARY", 0))
-        with os.fdopen(os.open(path, flags, mode), "wb") as fh:
-            fh.write(self.to_bytes(provider))
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(path)))
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(self.to_bytes(provider))
+            os.chmod(tmp, mode)
+            os.replace(tmp, path)
+        except BaseException:
+            os.unlink(tmp)
+            raise
 
     @staticmethod
     def peek_suite(blob: bytes) -> str:
