@@ -122,3 +122,79 @@ def test_trend_bar_and_json(tmp_path, capsys):
     assert main(["--db", db, "trend", "--json"]) == 0
     points = json.loads(capsys.readouterr().out)
     assert [p["safe_pct"] for p in points] == [50.0, 100.0]
+
+
+def test_export_markdown_for_ci(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    seed_run(db, label="nightly")
+    out_path = tmp_path / "comment.md"
+    assert main(["--db", db, "export", "--md", "-o", str(out_path)]) == 0
+    body = out_path.read_text(encoding="utf-8")
+    assert "# QDAY PQC migration report" in body
+    assert "nightly" in body and "50.0%" in body
+    assert "| risk | score | algorithm |" in body
+
+
+def test_tickets_jira_and_linear(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    seed_run(db)
+    assert main(["--db", db, "tickets", "--format", "jira"]) == 0
+    jira = capsys.readouterr().out
+    assert "h3. Migrate RSA-2048 certificate" in jira
+    assert "||Field||Value||" in jira
+    out_path = tmp_path / "tickets.md"
+    assert main(["--db", db, "tickets", "--format", "linear",
+                 "-o", str(out_path)]) == 0
+    linear = out_path.read_text(encoding="utf-8")
+    assert "### Migrate RSA-2048 certificate" in linear
+    assert "- **Migrate to:** ML-DSA" in linear
+
+
+def test_tickets_threshold_and_empty(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    seed_run(db)
+    assert main(["--db", db, "tickets", "--fail-on", "critical"]) == 0
+    assert "nothing to file" in capsys.readouterr().out
+
+
+def test_expired_waiver_hits_unit():
+    import datetime as dt
+
+    from qday.config import expired_waiver_hits
+    today = dt.date.today()
+    waivers = [
+        {"match": "certs/*", "reason": "old", "until": today - dt.timedelta(days=1)},
+        {"match": "*", "reason": "live", "until": today + dt.timedelta(days=1)},
+    ]
+    assets = [make_asset(), make_asset(location="other/x.pem")]
+    hits = expired_waiver_hits(assets, waivers, today=today)
+    assert len(hits) == 1 and hits[0][0]["match"] == "certs/*"
+    assert hits[0][1] == 1
+
+
+def test_scan_refuses_private_targets_without_authorization(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    code = main(["--db", db, "scan", "--tls", "127.0.0.1:443",
+                 "--ssh", "127.0.0.1:22"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "private-range target(s) found" in err
+    assert "--i-own-this-network" in err
+
+
+def test_scan_authorized_private_targets_run(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    closed = 1  # port 1 on loopback refuses instantly; still a full scan cycle
+    assert main(["--db", db, "scan", "--i-own-this-network",
+                 "--tls", f"127.0.0.1:{closed}"]) == 0
+    out = capsys.readouterr().out
+    assert "internal scope authorized" in out
+    assert "1 crypto assets found" in out
+
+
+def test_scan_config_authorized_private(tmp_path, capsys):
+    db = str(tmp_path / "t.db")
+    cfg = tmp_path / "qday.toml"
+    cfg.write_text('[scan]\ntls = ["127.0.0.1:1"]\nauthorized_private = true\n')
+    assert main(["--db", db, "scan", "--config", str(cfg)]) == 0
+    assert "internal scope authorized" in capsys.readouterr().out
