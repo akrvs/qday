@@ -79,6 +79,7 @@ def load_config(path: str | Path) -> dict:
         "agility": list(scan.get("agility", [])),
         "annotations": annotations,
         "waivers": waivers,
+        "authorized_private": bool(scan.get("authorized_private")),
     }
 
 

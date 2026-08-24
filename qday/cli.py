@@ -19,12 +19,14 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
+import socket
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-from .model import CryptoAsset
+from .model import CryptoAsset, Exposure
 from .store import Store
 
 DEFAULT_DB = "data/qday.db"
@@ -32,6 +34,48 @@ DEFAULT_DB = "data/qday.db"
 _LEVEL_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 _STARTTLS_PORTS = {"smtp": 587, "imap": 143, "pop3": 110}
+
+
+def _resolve_exposures(
+        endpoints: list[tuple[str, int]]) -> tuple[dict, list[tuple[str, int]]]:
+    """Map endpoints whose host resolves only to private addresses to
+    Exposure.INTERNAL; return (exposures, private_endpoints)."""
+    exposures: dict = {}
+    private: list[tuple[str, int]] = []
+    for endpoint in endpoints:
+        try:
+            infos = socket.getaddrinfo(endpoint[0], None,
+                                       type=socket.SOCK_STREAM)
+            addrs = {ipaddress.ip_address(info[4][0]) for info in infos}
+        except (OSError, ValueError):
+            continue
+        if addrs and all(addr.is_private for addr in addrs):
+            exposures[endpoint] = Exposure.INTERNAL
+            private.append(endpoint)
+    return exposures, private
+
+
+def _gate_private_targets(
+        groups: list[list[tuple[str, int]]], authorized: bool) -> int | None:
+    """Refuse network scans of private-range targets without authorization."""
+    if authorized:
+        return None
+    flagged: list[str] = []
+    seen: set = set()
+    for endpoints in groups:
+        _, private = _resolve_exposures(endpoints)
+        for host, port in private:
+            if (host, port) not in seen:
+                seen.add((host, port))
+                flagged.append(f"{host}:{port}")
+    if not flagged:
+        return None
+    print("private-range target(s) found: " + ", ".join(flagged),
+          file=sys.stderr)
+    print("scanning internal networks needs authorization: pass "
+          "--i-own-this-network or set authorized_private = true under "
+          "[scan] in qday.toml", file=sys.stderr)
+    return 2
 
 
 def _parse_endpoints(targets: list[str], default_port: int,
@@ -78,6 +122,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     agility_files = list(args.agility or [])
     annotations: list[dict] = []
     waivers: list[dict] = []
+    cfg: dict = {}
 
     config_path = args.config
     if config_path is None and os.path.exists(DEFAULT_CONFIG):
@@ -116,36 +161,75 @@ def _cmd_scan(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 2
 
+    authorized = args.i_own_this_network or bool(cfg.get("authorized_private"))
+    tls_endpoints = _parse_endpoints(tls_targets, 443, "TLS") \
+        if tls_targets else []
+    if tls_targets and tls_endpoints is None:
+        return 2
+    ssh_endpoints = _parse_endpoints(ssh_targets, 22, "SSH") \
+        if ssh_targets else []
+    if ssh_targets and ssh_endpoints is None:
+        return 2
+    starttls_triples = _parse_starttls(starttls_targets) \
+        if starttls_targets else []
+    if starttls_targets and starttls_triples is None:
+        return 2
+
+    exposure_maps: dict[str, dict] = {}
+    private_seen: set = set()
+    for name, pairs in (("tls", tls_endpoints),
+                        ("ssh", ssh_endpoints),
+                        ("starttls", [(h, p) for h, p, _ in starttls_triples])):
+        exposures, private = _resolve_exposures(pairs)
+        exposure_maps[name] = exposures
+        private_seen.update(private)
+    if private_seen and not authorized:
+        flagged = ", ".join(f"{h}:{p}" for h, p in sorted(private_seen))
+        print(f"private-range target(s) found: {flagged}", file=sys.stderr)
+        print("scanning internal networks needs authorization: pass "
+              "--i-own-this-network or set authorized_private = true under "
+              "[scan] in qday.toml", file=sys.stderr)
+        return 2
+    if private_seen:
+        print(f"internal scope authorized for {len(private_seen)} "
+              "private-range endpoint(s)")
+
     assets: list[CryptoAsset] = []
-    if tls_targets:
+    if tls_endpoints:
         from .scanners.tls import TlsScanner
-        endpoints = _parse_endpoints(tls_targets, 443, "TLS")
-        if endpoints is None:
-            return 2
-        # Handshakes are network-bound; a pool turns N × timeout into ~timeout.
-        with ThreadPoolExecutor(max_workers=min(16, len(endpoints))) as pool:
-            for result in pool.map(
-                    lambda hp: list(TlsScanner(*hp).scan()), endpoints):
+        exps = exposure_maps["tls"]
+
+        def scan_tls(endpoint):
+            scanner = TlsScanner(endpoint[0], endpoint[1],
+                                 exposure=exps.get(endpoint, Exposure.PUBLIC))
+            return list(scanner.scan())
+
+        with ThreadPoolExecutor(max_workers=min(16, len(tls_endpoints))) as pool:
+            for result in pool.map(scan_tls, tls_endpoints):
                 assets.extend(result)
-    if starttls_targets:
+    if starttls_triples:
         from .scanners.tls import TlsScanner
-        triples = _parse_starttls(starttls_targets)
-        if triples is None:
-            return 2
-        with ThreadPoolExecutor(max_workers=min(16, len(triples))) as pool:
-            for result in pool.map(
-                    lambda hpp: list(TlsScanner(hpp[0], hpp[1],
-                                                starttls=hpp[2]).scan()),
-                    triples):
+        exps = exposure_maps["starttls"]
+
+        def scan_starttls(triple):
+            scanner = TlsScanner(triple[0], triple[1], exposure=exps.get(
+                (triple[0], triple[1]), Exposure.PUBLIC), starttls=triple[2])
+            return list(scanner.scan())
+
+        with ThreadPoolExecutor(max_workers=min(16, len(starttls_triples))) as pool:
+            for result in pool.map(scan_starttls, starttls_triples):
                 assets.extend(result)
-    if ssh_targets:
+    if ssh_endpoints:
         from .scanners.ssh import SshScanner
-        endpoints = _parse_endpoints(ssh_targets, 22, "SSH")
-        if endpoints is None:
-            return 2
-        with ThreadPoolExecutor(max_workers=min(16, len(endpoints))) as pool:
-            for result in pool.map(
-                    lambda hp: list(SshScanner(*hp).scan()), endpoints):
+        exps = exposure_maps["ssh"]
+
+        def scan_ssh(endpoint):
+            scanner = SshScanner(endpoint[0], endpoint[1],
+                                 exposure=exps.get(endpoint, Exposure.PUBLIC))
+            return list(scanner.scan())
+
+        with ThreadPoolExecutor(max_workers=min(16, len(ssh_endpoints))) as pool:
+            for result in pool.map(scan_ssh, ssh_endpoints):
                 assets.extend(result)
     if cert_dirs:
         from .scanners.certs import CertFileScanner
@@ -577,6 +661,9 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--allow-expired-waivers", action="store_true",
                     help="do not fail when an expired waiver still covers "
                          "live assets")
+    ps.add_argument("--i-own-this-network", action="store_true",
+                    help="authorize scanning endpoints that resolve to "
+                         "private-range addresses")
     ps.set_defaults(fn=_cmd_scan)
 
     pd = sub.add_parser("diff", help="compare two runs (default: last two)")
