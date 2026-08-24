@@ -404,6 +404,12 @@ def _cmd_export(args: argparse.Namespace) -> int:
         path = ("qday-report.html" if args.output == "cbom.json"
                 else args.output)
         kind = "HTML report"
+    elif args.md:
+        from .dashboard.html import render_markdown
+        out = render_markdown(store, run_id)
+        path = ("qday-report.md" if args.output == "cbom.json"
+                else args.output)
+        kind = "Markdown report"
     elif args.csv:
         import csv
         import io
@@ -559,6 +565,9 @@ def main(argv: list[str] | None = None) -> int:
     pfmt.add_argument("--html", action="store_true",
                       help="write a single-file HTML report instead of a CBOM "
                            "(default output: qday-report.html)")
+    pfmt.add_argument("--md", action="store_true",
+                      help="write a GitHub-flavored Markdown summary, sized "
+                           "for PR comments (default output: qday-report.md)")
     pfmt.add_argument("--csv", action="store_true",
                       help="write a CSV report instead of a CBOM "
                            "(default output: qday-report.csv)")

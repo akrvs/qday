@@ -283,6 +283,79 @@ def _esc(s) -> str:
     return _html.escape(str(s))
 
 
+def render_markdown(store: Store, run_id: int | None = None) -> str:
+    """GitHub-flavored Markdown summary of a run, sized for PR comments."""
+    from ..risk import remediation
+
+    run_id = run_id or store.latest_run_id()
+    if run_id is None:
+        return "No scan runs yet. Run `qday scan` first.\n"
+    info = store.run_info(run_id)
+    rows = store.assets_for_run(run_id)
+    total = len(rows)
+    vulnerable = sum(r["quantum_vulnerable"] for r in rows)
+    safe_pct = 100.0 * (total - vulnerable) / total if total else 0.0
+
+    label = f" ({info['label']})" if info["label"] else ""
+    lines = [
+        "# QDAY PQC migration report",
+        "",
+        f"Run {run_id}{label} - {info['started_at']}",
+        "",
+        f"| assets | quantum-vulnerable | PQC-safe |",
+        "|---|---|---|",
+        f"| {total} | {vulnerable} | {safe_pct:.1f}% |",
+        "",
+    ]
+
+    hist = store.run_history()
+    prior = [h["id"] for h in hist if h["id"] < run_id]
+    if prior:
+        delta = store.diff_runs(prior[-1], run_id)
+        lines += [f"## Change since run {prior[-1]}", ""]
+        for title, key, sign in (
+            ("New / regressed", "new", "+"),
+            ("Resolved", "resolved", "-"),
+        ):
+            found = delta[key]
+            lines.append(f"- {sign} {title} ({len(found)}): "
+                         + (", ".join(f"`{r['location']}`" for r in found[:5])
+                            + (f" (+{len(found) - 5} more)" if len(found) > 5 else "")
+                            or "none"))
+        lines.append("")
+
+    counts = {lvl: 0 for lvl in _RISK_ORDER}
+    for r in rows:
+        counts[r["risk_level"] or "none"] += 1
+    lines += ["## Risk breakdown", "", "| level | assets |", "|---|---|"]
+    lines += [f"| {lvl} | {counts[lvl]} |" for lvl in _RISK_ORDER]
+    lines.append("")
+
+    worst = rows[:10]
+    if worst:
+        lines += [
+            "## Highest-risk findings",
+            "",
+            "| risk | score | algorithm | bits | type | migrate to | location |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for r in worst:
+            score = (f"{r['risk_score']:.1f}"
+                     if r["risk_score"] is not None else "-")
+            fix = remediation(r["algorithm"], r["asset_type"],
+                              r.get("key_size")) or "-"
+            lines.append(
+                f"| {r['risk_level'] or 'none'} | {score} "
+                f"| {_esc(r['algorithm'])} | {r['key_size'] or '-'} "
+                f"| {_esc(r['asset_type'])} | {_esc(fix)} "
+                f"| `{_esc(r['location'])}` |")
+        if total > len(worst):
+            lines.append("")
+            lines.append(f"<sub>Showing {len(worst)} of {total} assets."
+                         "</sub>")
+    return "\n".join(lines) + "\n"
+
+
 def _page(body: str) -> str:
     return (f"<!doctype html><html><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
