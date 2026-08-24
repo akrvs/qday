@@ -208,3 +208,13 @@ deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
 2030-12-31   NIST IR 8547 — 112-bit-security algorithms deprecated
 2035-12-31   NIST / CNSA 2.0 — quantum-vulnerable crypto disallowed
 ```
+
+## [ Patch Notes ] — hardening round
+
+- Discovery rejects out-of-range ports instead of turning them into dead
+  probe targets
+- `qday prune` tolerates an empty selection instead of raising invalid SQL
+- Agile key files are written atomically (temp file + rename) and never
+  through a pre-planted symlink
+- Code rules and the dependency catalog are parsed once per process instead
+  of once per scanned directory - multi-directory scans skip the re-read
