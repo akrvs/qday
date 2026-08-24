@@ -174,8 +174,16 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
     waived = 0
     if waivers:
-        from .config import apply_waivers
+        from .config import apply_waivers, expired_waiver_hits
         waived = apply_waivers(assets, scores, waivers)
+        expired = expired_waiver_hits(assets, waivers)
+        if expired and not args.allow_expired_waivers:
+            for w, n in expired:
+                print(f"expired waiver {w['match']!r} (until {w['until']}) "
+                      f"still covers {n} asset(s)", file=sys.stderr)
+            print("renew or drop the waiver, or pass --allow-expired-waivers",
+                  file=sys.stderr)
+            return 3
 
     store = Store(args.db)
     run_id = store.save_run(assets, scores, label=args.label)
@@ -501,6 +509,9 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--fail-under", type=float, metavar="PCT",
                     help="exit 3 if the PQC-safe percentage is below PCT "
                          "(CI gate)")
+    ps.add_argument("--allow-expired-waivers", action="store_true",
+                    help="do not fail when an expired waiver still covers "
+                         "live assets")
     ps.set_defaults(fn=_cmd_scan)
 
     pd = sub.add_parser("diff", help="compare two runs (default: last two)")

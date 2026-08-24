@@ -103,6 +103,21 @@ def apply_waivers(assets: list[CryptoAsset],
     return waived
 
 
+def expired_waiver_hits(assets: list[CryptoAsset],
+                        waivers: list[dict],
+                        today: date | None = None) -> list[tuple[dict, int]]:
+    """Expired waivers that still cover live assets, with hit counts."""
+    today = today or date.today()
+    hits: list[tuple[dict, int]] = []
+    for w in waivers:
+        if w["until"] >= today:
+            continue
+        n = sum(1 for a in assets if fnmatch(a.location, w["match"]))
+        if n:
+            hits.append((w, n))
+    return hits
+
+
 def apply_annotations(assets: list[CryptoAsset],
                       annotations: list[dict]) -> int:
     """Mutate assets whose location matches; first matching rule wins per
