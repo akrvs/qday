@@ -453,6 +453,65 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_tickets(args: argparse.Namespace) -> int:
+    from .risk import remediation
+
+    store = Store(args.db)
+    run_id = args.run or store.latest_run_id()
+    if run_id is None:
+        print("no scan runs recorded yet", file=sys.stderr)
+        return 1
+    rows = store.assets_for_run(run_id)
+    if args.fail_on:
+        threshold = _LEVEL_RANK[args.fail_on]
+        rows = [r for r in rows
+                if _LEVEL_RANK.get(r["risk_level"] or "none", 0) >= threshold]
+    else:
+        rows = [r for r in rows if r["risk_score"]]
+
+    def title(r: dict) -> str:
+        bits = f"-{r['key_size']}" if r["key_size"] else ""
+        return (f"Migrate {r['algorithm']}{bits} {r['asset_type']} "
+                f"at {r['location']}")
+
+    out_parts = []
+    for i, r in enumerate(rows):
+        fix = remediation(r["algorithm"], r["asset_type"],
+                          r.get("key_size")) or "assess manually"
+        score = (f"{r['risk_score']:.1f}"
+                 if r["risk_score"] is not None else "-")
+        if args.format == "jira":
+            body = (f"h3. {title(r)}\n\n"
+                    f"||Field||Value||\n"
+                    f"|Risk|{r['risk_level'] or 'none'} ({score})|\n"
+                    f"|Algorithm|{r['algorithm']}|\n"
+                    f"|Type|{r['asset_type']}|\n"
+                    f"|Source|{r['scanner']}|\n"
+                    f"|Migrate to|{fix}|\n"
+                    f"|Run|{run_id}|")
+        else:
+            body = (f"### {title(r)}\n\n"
+                    f"- **Risk:** {r['risk_level'] or 'none'} ({score})\n"
+                    f"- **Algorithm:** {r['algorithm']}\n"
+                    f"- **Type:** {r['asset_type']}\n"
+                    f"- **Source:** {r['scanner']}\n"
+                    f"- **Migrate to:** {fix}\n"
+                    f"- **Run:** {run_id}")
+        out_parts.append(body)
+    out = ("\n\n---\n\n".join(out_parts) + "\n") if out_parts else ""
+    if not rows:
+        print("no findings at this threshold - nothing to file")
+        return 0
+    if args.output == "-":
+        print(out, end="")
+    else:
+        path = args.output
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(out)
+        print(f"wrote {len(rows)} ticket(s) to {path}")
+    return 0
+
+
 def _cmd_import(args: argparse.Namespace) -> int:
     from .cbom import import_cbom
     try:
@@ -577,6 +636,18 @@ def main(argv: list[str] | None = None) -> int:
     pe.add_argument("-o", "--output", default="cbom.json",
                     help="output file, or - for stdout")
     pe.set_defaults(fn=_cmd_export)
+
+    pt = sub.add_parser("tickets",
+                        help="emit one migration ticket per finding, ready "
+                             "to paste into Jira or Linear")
+    pt.add_argument("--run", type=int, help="run id (default: latest)")
+    pt.add_argument("--format", choices=("jira", "linear"), default="jira",
+                    help="ticket body dialect (default: jira wiki markup)")
+    pt.add_argument("--fail-on", choices=list(_LEVEL_RANK),
+                    help="only file findings at or above this risk level")
+    pt.add_argument("-o", "--output", default="-",
+                    help="output file, or - for stdout")
+    pt.set_defaults(fn=_cmd_tickets)
 
     pi = sub.add_parser("import",
                         help="import a CycloneDX CBOM as a new run")
