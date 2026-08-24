@@ -218,3 +218,20 @@ deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
   through a pre-planted symlink
 - Code rules and the dependency catalog are parsed once per process instead
   of once per scanned directory - multi-directory scans skip the re-read
+
+## [ New Weapons ]
+
+- **`qday tickets`** — emit one migration ticket per finding in Jira wiki
+  markup or Linear markdown (`--format`, `--fail-on`, `-o`). Paste-ready; no
+  API keys required.
+- **`qday export --md`** — GitHub-flavored Markdown summary sized for PR
+  comments: score table, delta vs the previous run, risk breakdown, top
+  findings. Drop it into a scheduled Action and every PR review sees the
+  crypto posture.
+- **Expired waivers bite back** — a lapsed waiver whose pattern still covers
+  live assets fails the scan (exit 3) until you renew it, drop it, or pass
+  `--allow-expired-waivers`.
+- **Authorization gate** — endpoints that resolve to private-range addresses
+  are refused unless you pass `--i-own-this-network` or set
+  `authorized_private = true` under `[scan]`; authorized internal targets are
+  inventoried with `exposure=internal`, so their risk scores read honestly.
