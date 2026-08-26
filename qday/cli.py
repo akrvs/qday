@@ -618,7 +618,12 @@ def _cmd_tickets(args: argparse.Namespace) -> int:
 
 
 def _cmd_policy(args: argparse.Namespace) -> int:
-    from .config import DEFAULT_CONFIG, violations_from_rows
+    from .config import (
+        DEFAULT_CONFIG,
+        ConfigError,
+        load_config,
+        violations_from_rows,
+    )
     from .model import canonical_family
 
     config_path = args.config
