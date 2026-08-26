@@ -14,7 +14,6 @@ from __future__ import annotations
 import ipaddress
 import socket
 from concurrent.futures import ThreadPoolExecutor
-from typing import Iterator
 
 _CONNECT_TIMEOUT = 1.5
 _MAX_HOSTS = 4096          # refuse anything that would expand past this
