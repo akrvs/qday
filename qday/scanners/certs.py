@@ -25,6 +25,99 @@ _SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__"}
 _MAX_FILE_BYTES = 1_000_000
 
 
+def build_cert_asset(cert: x509.Certificate, rel: str) -> CryptoAsset:
+    """A CryptoAsset for one parsed certificate (shared by file/image scanners)."""
+    family, bits, curve = classify_key(cert.public_key())
+    not_after = cert.not_valid_after_utc
+    return CryptoAsset(
+        name=cert.subject.rfc4514_string() or rel,
+        asset_type=AssetType.CERTIFICATE,
+        algorithm=family,
+        key_size=bits,
+        curve=curve,
+        location=rel,
+        scanner="certs",
+        exposure=Exposure.LOCAL,
+        details={
+            "issuer": cert.issuer.rfc4514_string(),
+            "not_after": not_after.isoformat(),
+            "expired": not_after < datetime.now(timezone.utc),
+            "signature_algorithm": cert.signature_algorithm_oid._name,
+            "serial": format(cert.serial_number, "x"),
+        },
+    )
+
+
+def key_assets_from_bytes(
+    data: bytes, rel: str
+) -> Iterator[CryptoAsset]:
+    """Classify raw key material (PEM/DER/OpenSSH, public or private)."""
+    asset = _key_asset(data, rel)
+    if asset is not None:
+        yield asset
+
+
+def pkcs12_assets_from_bytes(data: bytes, rel: str) -> Iterator[CryptoAsset]:
+    """Everything readable inside a PKCS#12 blob."""
+    try:
+        key, cert, extras = pkcs12.load_key_and_certificates(data, None)
+    except (ValueError, UnsupportedAlgorithm):
+        yield CryptoAsset(
+            name=f"encrypted keystore ({rel})",
+            asset_type=AssetType.KEY_MATERIAL, algorithm="UNKNOWN",
+            location=rel, scanner=self_name,
+            details={"encrypted": True, "container": "pkcs12"},
+        )
+        return
+    if key is not None:
+        family, bits, curve = classify_key(key)
+        yield CryptoAsset(
+            name=f"private key ({rel})",
+            asset_type=AssetType.KEY_MATERIAL,
+            algorithm=family, key_size=bits, curve=curve,
+            location=rel, scanner=self_name,
+            details={"private": True, "container": "pkcs12"},
+        )
+    for c in ([cert] if cert else []) + list(extras or []):
+        yield build_cert_asset(c, rel)
+
+
+def ssh_line_key(line: str):
+    """Public key from an authorized_keys/known_hosts line, or None. Finds
+    the key-type token so leading options/host fields don't matter."""
+    tokens = line.split()
+    for i, tok in enumerate(tokens[:-1]):
+        if _SSH_KEY_TYPE.match(tok):
+            try:
+                return serialization.load_ssh_public_key(
+                    f"{tok} {tokens[i + 1]}".encode())
+            except (ValueError, UnsupportedAlgorithm):
+                return None
+    return None
+
+
+def ssh_file_assets(text: str, rel: str, filename: str) -> Iterator[CryptoAsset]:
+    """One asset per recognized key line of an authorized_keys/known_hosts file."""
+    for lineno, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key = ssh_line_key(line)
+        if key is None:
+            continue
+        family, bits, curve = classify_key(key)
+        yield CryptoAsset(
+            name=f"{filename} entry ({rel}:{lineno})",
+            asset_type=AssetType.KEY_MATERIAL,
+            algorithm=family, key_size=bits, curve=curve,
+            location=f"{rel}:{lineno}", scanner=self_name,
+            details={"private": False, "source": filename},
+        )
+
+
+self_name = "certs"
+
+
 class CertFileScanner:
     name = "certs"
 
@@ -50,7 +143,7 @@ class CertFileScanner:
         found = False
         for cert in _load_certs(data):
             found = True
-            yield self._cert_asset(cert, rel)
+            yield build_cert_asset(cert, rel)
         if not found:
             asset = _key_asset(data, rel)
             if asset:
@@ -62,27 +155,7 @@ class CertFileScanner:
         except OSError:
             return
         rel = str(path.relative_to(self.root))
-        try:
-            key, cert, extras = pkcs12.load_key_and_certificates(data, None)
-        except (ValueError, UnsupportedAlgorithm):
-            # Password-protected (or unreadable) keystore: the algorithm is
-            # hidden, but a keystore on disk is still inventory-worthy.
-            yield CryptoAsset(
-                name=f"encrypted keystore ({rel})",
-                asset_type=AssetType.KEY_MATERIAL, algorithm="UNKNOWN",
-                location=rel, scanner=self.name,
-                details={"encrypted": True, "container": "pkcs12"})
-            return
-        if key is not None:
-            family, bits, curve = classify_key(key)
-            yield CryptoAsset(
-                name=f"private key ({rel})",
-                asset_type=AssetType.KEY_MATERIAL,
-                algorithm=family, key_size=bits, curve=curve,
-                location=rel, scanner=self.name,
-                details={"private": True, "container": "pkcs12"})
-        for c in ([cert] if cert else []) + list(extras or []):
-            yield self._cert_asset(c, rel)
+        yield from pkcs12_assets_from_bytes(data, rel)
 
     def _scan_ssh_lines(self, path: Path) -> Iterator[CryptoAsset]:
         """authorized_keys / known_hosts: one public key per line, with
@@ -93,55 +166,7 @@ class CertFileScanner:
         except OSError:
             return
         rel = str(path.relative_to(self.root))
-        for lineno, line in enumerate(text.splitlines(), 1):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            key = _ssh_line_key(line)
-            if key is None:
-                continue
-            family, bits, curve = classify_key(key)
-            yield CryptoAsset(
-                name=f"{path.name} entry ({rel}:{lineno})",
-                asset_type=AssetType.KEY_MATERIAL,
-                algorithm=family, key_size=bits, curve=curve,
-                location=f"{rel}:{lineno}", scanner=self.name,
-                details={"private": False, "source": path.name})
-
-    def _cert_asset(self, cert: x509.Certificate, rel: str) -> CryptoAsset:
-        family, bits, curve = classify_key(cert.public_key())
-        not_after = cert.not_valid_after_utc
-        return CryptoAsset(
-            name=cert.subject.rfc4514_string() or rel,
-            asset_type=AssetType.CERTIFICATE,
-            algorithm=family,
-            key_size=bits,
-            curve=curve,
-            location=rel,
-            scanner=self.name,
-            exposure=Exposure.LOCAL,
-            details={
-                "issuer": cert.issuer.rfc4514_string(),
-                "not_after": not_after.isoformat(),
-                "expired": not_after < datetime.now(timezone.utc),
-                "signature_algorithm": cert.signature_algorithm_oid._name,
-                "serial": format(cert.serial_number, "x"),
-            },
-        )
-
-
-def _ssh_line_key(line: str):
-    """Public key from an authorized_keys/known_hosts line, or None. Finds
-    the key-type token so leading options/host fields don't matter."""
-    tokens = line.split()
-    for i, tok in enumerate(tokens[:-1]):
-        if _SSH_KEY_TYPE.match(tok):
-            try:
-                return serialization.load_ssh_public_key(
-                    f"{tok} {tokens[i + 1]}".encode())
-            except (ValueError, UnsupportedAlgorithm):
-                return None
-    return None
+        yield from ssh_file_assets(text, rel, path.name)
 
 
 def _load_certs(data: bytes) -> list[x509.Certificate]:

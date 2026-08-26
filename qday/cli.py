@@ -24,6 +24,7 @@ import json
 import os
 import socket
 import sys
+import tarfile
 from concurrent.futures import ThreadPoolExecutor
 
 from .model import CryptoAsset, Exposure
@@ -155,9 +156,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         tls_targets += live
 
     if not (tls_targets or ssh_targets or starttls_targets or cert_dirs
-            or code_dirs or dep_dirs or agility_files):
-        print("nothing to scan: pass --tls/--ssh/--starttls/--certs/--code/"
-              "--deps/--agility or add a [scan] section to qday.toml",
+            or code_dirs or dep_dirs or agility_files or args.image):
+        print("nothing to scan: pass --tls/--ssh/--starttls/--certs/--image/"
+              "--code/--deps/--agility or add a [scan] section to qday.toml",
               file=sys.stderr)
         return 2
 
@@ -235,6 +236,14 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         from .scanners.certs import CertFileScanner
         for d in cert_dirs:
             assets.extend(CertFileScanner(d).scan())
+    if args.image:
+        from .scanners.image import ImageScanner
+        for image_path in args.image:
+            try:
+                assets.extend(ImageScanner(image_path).scan())
+            except (tarfile.TarError, OSError) as exc:
+                print(f"image error: {image_path}: {exc}", file=sys.stderr)
+                return 2
     if code_dirs:
         from .scanners.code import CodeScanner
         for d in code_dirs:
@@ -642,6 +651,9 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--certs", action="append", metavar="DIR",
                     help="scan a directory for certificate/key files "
                          "(repeatable)")
+    ps.add_argument("--image", action="append", metavar="IMAGE.tar",
+                    help="scan a docker-save/OCI image archive for "
+                         "certificate/key material (repeatable)")
     ps.add_argument("--code", action="append", metavar="DIR",
                     help="scan a source tree for crypto usage (repeatable)")
     ps.add_argument("--deps", action="append", metavar="DIR",
