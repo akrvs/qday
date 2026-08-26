@@ -81,6 +81,7 @@ def load_config(path: str | Path) -> dict:
         "waivers": waivers,
         "authorized_private": bool(scan.get("authorized_private")),
         "policy": load_policy(doc),
+        "milestones": load_milestones(doc, path),
     }
 
 
@@ -131,6 +132,32 @@ def load_policy(doc: dict) -> list[str] | None:
     if not isinstance(allowed, list) or any(not isinstance(a, str) for a in allowed):
         raise ConfigError("policy.allowed_algorithms must be a list of strings")
     return [a for a in allowed]
+
+
+def load_milestones(doc: dict, path: str | Path | None = None) -> list[dict]:
+    """[[milestone]] entries: date + label markers for the trend charts."""
+    milestones = doc.get("milestone", [])
+    for m in milestones:
+        missing = {"date", "label"} - set(m)
+        if missing:
+            where = f"{path}: " if path else ""
+            raise ConfigError(
+                f"{where}[[milestone]] entry missing {sorted(missing)}")
+        if isinstance(m["date"], str):
+            try:
+                m["date"] = date.fromisoformat(m["date"])
+            except ValueError as exc:
+                where = f"{path}: " if path else ""
+                raise ConfigError(
+                    f"{where}milestone date must be a date, "
+                    f"got {m['date']!r}") from exc
+        elif isinstance(m["date"], datetime):
+            m["date"] = m["date"].date()
+        elif not isinstance(m["date"], date):
+            where = f"{path}: " if path else ""
+            raise ConfigError(
+                f"{where}milestone date must be a date, got {m['date']!r}")
+    return milestones
 
 
 def policy_violations(assets: list[CryptoAsset],

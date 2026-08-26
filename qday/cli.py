@@ -409,13 +409,39 @@ def _cmd_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _milestones_for(cfg: dict) -> list[dict]:
+    return cfg.get("milestones") or []
+
+
+def _run_milestone(run_date: date, milestones: list[dict]) -> str:
+    """The label of the newest milestone on/before this run's date, if any."""
+    hits = [m for m in milestones if m["date"] <= run_date]
+    if not hits:
+        return ""
+    latest = max(hits, key=lambda m: m["date"])
+    return f"  [{latest['label']} @ {latest['date'].isoformat()}]"
+
+
 def _cmd_trend(args: argparse.Namespace) -> int:
+    from .config import DEFAULT_CONFIG, ConfigError, load_config
+
     store = Store(args.db)
     history = store.run_history()
     if not history:
-        print("no scan runs recorded yet — run `qday scan` first",
+        print("no scan runs recorded yet - run `qday scan` first",
               file=sys.stderr)
         return 1
+    milestones = []
+    config_path = args.config
+    if config_path is None and os.path.exists(DEFAULT_CONFIG):
+        config_path = DEFAULT_CONFIG
+    if config_path:
+        try:
+            cfg = load_config(config_path)
+        except (OSError, ConfigError) as exc:
+            print(f"config error: {exc}", file=sys.stderr)
+            return 2
+        milestones = _milestones_for(cfg)
     points = [{"id": h["id"], "started_at": h["started_at"],
                "safe_pct": round(100.0 * (h["total"] - h["vulnerable"])
                                  / h["total"], 1) if h["total"] else 0.0}
@@ -426,8 +452,17 @@ def _cmd_trend(args: argparse.Namespace) -> int:
     width = 40
     for pt in points:
         bar = "#" * round(pt["safe_pct"] / 100 * width)
+        stamp = pt["started_at"][:10]
+        note = ""
+        if milestones:
+            from datetime import date as _date
+
+            try:
+                note = _run_milestone(_date.fromisoformat(stamp), milestones)
+            except ValueError:
+                note = ""
         print(f"run {pt['id']:<4} {pt['started_at']:<21} "
-              f"{pt['safe_pct']:>5.1f}% |{bar:<{width}}|")
+              f"{pt['safe_pct']:>5.1f}% |{bar:<{width}}|{note}")
     return 0
 
 
@@ -752,6 +787,9 @@ def main(argv: list[str] | None = None) -> int:
 
     pt = sub.add_parser("trend", help="print PQC-safe percentage per run")
     pt.add_argument("--json", action="store_true")
+    pt.add_argument("--config", metavar="TOML",
+                    help="scan config (default: qday.toml if present) - "
+                         "milestones annotate the trend")
     pt.set_defaults(fn=_cmd_trend)
 
     pp = sub.add_parser("prune", help="delete old runs from the database")
