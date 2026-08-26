@@ -347,6 +347,14 @@ def _cmd_diff(args: argparse.Namespace) -> int:
             print(f"fail-on-new={args.fail_on_new}: new asset at threshold "
                   "(exit 3)", file=sys.stderr)
             return 3
+
+    if args.fail_on_regression and delta.get("regressed"):
+        names = ", ".join(r["location"] for r in delta["regressed"][:5])
+        more = f" (+{len(delta['regressed']) - 5} more)" \
+            if len(delta["regressed"]) > 5 else ""
+        print(f"fail-on-regression: {len(delta['regressed'])} asset(s) went "
+              f"PQC-safe -> quantum-vulnerable: {names}{more}", file=sys.stderr)
+        return 3
     return 0
 
 
@@ -775,6 +783,9 @@ def main(argv: list[str] | None = None) -> int:
     pd.add_argument("--fail-on-new", choices=list(_LEVEL_RANK),
                     help="exit 3 if a NEW asset reaches this risk level "
                          "(CI gate that ignores known backlog)")
+    pd.add_argument("--fail-on-regression", action="store_true",
+                    help="exit 3 if a persisted asset went PQC-safe -> "
+                         "quantum-vulnerable")
     pd.set_defaults(fn=_cmd_diff)
 
     pr = sub.add_parser("report", help="print inventory for a run")

@@ -92,13 +92,21 @@ class Store:
 
     def diff_runs(self, from_id: int, to_id: int) -> dict[str, list[dict]]:
         """Assets that appeared, disappeared, or persisted between two runs,
-        keyed by the stable asset_id."""
+        keyed by the stable asset_id. `regressed` flags persisted assets that
+        went PQC-safe -> quantum-vulnerable between the two runs."""
         old = {r["asset_id"]: r for r in self.assets_for_run(from_id)}
         new = {r["asset_id"]: r for r in self.assets_for_run(to_id)}
+        regressed = [
+            r for aid, r in new.items()
+            if aid in old
+            and not old[aid]["quantum_vulnerable"]
+            and r["quantum_vulnerable"]
+        ]
         return {
             "new": [r for aid, r in new.items() if aid not in old],
             "resolved": [r for aid, r in old.items() if aid not in new],
             "persisting": [r for aid, r in new.items() if aid in old],
+            "regressed": regressed,
         }
 
     def delete_runs(self, run_ids: list[int]) -> None:
