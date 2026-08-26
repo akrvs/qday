@@ -413,7 +413,7 @@ def _milestones_for(cfg: dict) -> list[dict]:
     return cfg.get("milestones") or []
 
 
-def _run_milestone(run_date: date, milestones: list[dict]) -> str:
+def _run_milestone(run_date: "date", milestones: list[dict]) -> str:
     """The label of the newest milestone on/before this run's date, if any."""
     hits = [m for m in milestones if m["date"] <= run_date]
     if not hits:
