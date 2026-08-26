@@ -278,6 +278,18 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                   file=sys.stderr)
             return 3
 
+    policy = cfg.get("policy")
+    if policy:
+        from .config import policy_violations
+        violations = policy_violations(assets, scores, policy)
+        if violations:
+            detail = ", ".join(f"{family} x{n}"
+                               for family, n in sorted(violations.items()))
+            print(f"policy violation(s): {detail}", file=sys.stderr)
+            print("these algorithm families are outside [policy] "
+                  "allowed_algorithms", file=sys.stderr)
+            return 3
+
     store = Store(args.db)
     run_id = store.save_run(assets, scores, label=args.label)
     vulnerable = sum(1 for a in assets if a.quantum_vulnerable)
@@ -605,6 +617,43 @@ def _cmd_tickets(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_policy(args: argparse.Namespace) -> int:
+    from .config import DEFAULT_CONFIG, violations_from_rows
+    from .model import canonical_family
+
+    config_path = args.config
+    if config_path is None and os.path.exists(DEFAULT_CONFIG):
+        config_path = DEFAULT_CONFIG
+    if config_path is None:
+        print("no config found: pass --config or add qday.toml",
+              file=sys.stderr)
+        return 2
+    try:
+        cfg = load_config(config_path)
+    except (OSError, ConfigError) as exc:
+        print(f"config error: {exc}", file=sys.stderr)
+        return 2
+    allowed = cfg.get("policy")
+    if not allowed:
+        print("no [policy] allowed_algorithms list in the config")
+        return 0
+
+    store = Store(args.db)
+    run_id = args.run or store.latest_run_id()
+    if run_id is None:
+        print("no scan runs recorded yet", file=sys.stderr)
+        return 1
+    rows = store.assets_for_run(run_id)
+    violations = violations_from_rows(rows, allowed)
+    if not violations:
+        print(f"run {run_id}: every family is inside the policy")
+        return 0
+    print(f"run {run_id}: policy violation(s):")
+    for family, count in sorted(violations.items(), key=lambda kv: -kv[1]):
+        print(f"  {canonical_family(family)}: {count} asset(s)")
+    return 3
+
+
 def _cmd_import(args: argparse.Namespace) -> int:
     from .cbom import import_cbom
     try:
@@ -747,6 +796,14 @@ def main(argv: list[str] | None = None) -> int:
     pt.add_argument("-o", "--output", default="-",
                     help="output file, or - for stdout")
     pt.set_defaults(fn=_cmd_tickets)
+
+    pp = sub.add_parser("policy",
+                        help="check the latest run against [policy] "
+                             "allowed_algorithms")
+    pp.add_argument("--run", type=int, help="run id (default: latest)")
+    pp.add_argument("--config", metavar="TOML",
+                    help="scan config (default: qday.toml if present)")
+    pp.set_defaults(fn=_cmd_policy)
 
     pi = sub.add_parser("import",
                         help="import a CycloneDX CBOM as a new run")

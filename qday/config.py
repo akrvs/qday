@@ -80,6 +80,7 @@ def load_config(path: str | Path) -> dict:
         "annotations": annotations,
         "waivers": waivers,
         "authorized_private": bool(scan.get("authorized_private")),
+        "policy": load_policy(doc),
     }
 
 
@@ -117,6 +118,52 @@ def expired_waiver_hits(assets: list[CryptoAsset],
         if n:
             hits.append((w, n))
     return hits
+
+
+def load_policy(doc: dict) -> list[str] | None:
+    """The [policy] allowed_algorithms list, or None when no policy is set."""
+    policy = doc.get("policy", {})
+    if not isinstance(policy, dict):
+        raise ConfigError("[policy] must be a table")
+    allowed = policy.get("allowed_algorithms")
+    if allowed is None:
+        return None
+    if not isinstance(allowed, list) or any(not isinstance(a, str) for a in allowed):
+        raise ConfigError("policy.allowed_algorithms must be a list of strings")
+    return [a for a in allowed]
+
+
+def policy_violations(assets: list[CryptoAsset],
+                      scores: dict[str, tuple[float, str]],
+                      allowed: list[str]) -> dict[str, int]:
+    """Families present on live (scored) assets that the policy does not allow."""
+    from .model import canonical_family
+
+    allowed_set = {canonical_family(a) for a in allowed}
+    violations: dict[str, int] = {}
+    for asset in assets:
+        score, _ = scores.get(asset.asset_id, (None, None))
+        if score is not None and score <= 0:
+            continue
+        family = canonical_family(asset.algorithm)
+        if family not in allowed_set:
+            violations[family] = violations.get(family, 0) + 1
+    return violations
+
+
+def violations_from_rows(rows: list[dict], allowed: list[str]) -> dict[str, int]:
+    """Same check for stored rows (risk_score already persisted)."""
+    from .model import canonical_family
+
+    allowed_set = {canonical_family(a) for a in allowed}
+    violations: dict[str, int] = {}
+    for r in rows:
+        if r["risk_score"] is not None and r["risk_score"] <= 0:
+            continue
+        family = canonical_family(r["algorithm"])
+        if family not in allowed_set:
+            violations[family] = violations.get(family, 0) + 1
+    return violations
 
 
 def apply_annotations(assets: list[CryptoAsset],
