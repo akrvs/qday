@@ -235,3 +235,22 @@ deprecated = ["rsa-2048", "ecdsa-p256"]            # generate() refuses these
   are refused unless you pass `--i-own-this-network` or set
   `authorized_private = true` under `[scan]`; authorized internal targets are
   inventoried with `exposure=internal`, so their risk scores read honestly.
+
+## [ Round Two ]
+
+- **`qday scan --image`** — point it at a docker-save/OCI archive and every
+  certificate, key, PKCS#12 keystore, and SSH key line inside the layers is
+  inventoried with `layer!member` locations. Nothing touches disk.
+- **Policy as code** — `[policy] allowed_algorithms` in qday.toml: any family
+  outside the list fails the scan (exit 3). `qday policy` previews violations
+  against the latest run.
+- **Certificate expiry card** — the dashboard lists certificates by soonest
+  not-after date with day countdowns, expired ones in critical red.
+- **Trend milestones** — `[[milestone]] date/label` entries annotate `qday
+  trend` lines, so burndowns show which kickoff or migration each jump
+  belonged to.
+- **Regression gate** — `qday diff --fail-on-regression` fails when a
+  persisted asset goes PQC-safe back to quantum-vulnerable, even if the
+  overall percentage improved.
+- **`qday rollup`** — merge CBOM exports from many estates into one database,
+  one labeled run per file, ready to compare on a single dashboard.
