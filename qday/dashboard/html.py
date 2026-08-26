@@ -158,7 +158,9 @@ def render_dashboard(store: Store, run_id: int | None = None) -> str:
              '<th>Bits</th><th>Type</th><th>Location</th></tr>'
              + "".join(body_rows) + "</table></div>"
              + (f'<div class="footnote">Showing 50 of {total} assets.</div>'
-                if total > 50 else "") + "</div>")
+                 if total > 50 else "") + "</div>")
+
+    expiry_card = _expiry_card(rows)
 
     hist = store.run_history()
     diff_card = _diff_card(store, hist, run_id)
@@ -177,8 +179,54 @@ def render_dashboard(store: Store, run_id: int | None = None) -> str:
     label = f" — {_esc(info['label'])}" if info["label"] else ""
     header = (f'<h1>QDAY <small>run {run_id}{label} · '
               f'{_esc(info["started_at"])}</small></h1>')
-    return _page(header + tiles + deadlines + _burndown_card(hist) + dist
-                 + diff_card + table + trend)
+    return _page(header + tiles + deadlines + expiry_card + _burndown_card(hist)
+                 + dist + diff_card + table + trend)
+
+
+def _expiry_card(rows: list[dict]) -> str:
+    """Certificates sorted by soonest expiry, with a days-remaining countdown."""
+    import json as _json
+
+    entries = []
+    today = date.today()
+    for r in rows:
+        if r["asset_type"] != "certificate":
+            continue
+        try:
+            details = _json.loads(r.get("details_json") or "{}")
+        except ValueError:
+            continue
+        raw = details.get("not_after")
+        if not raw:
+            continue
+        try:
+            not_after = datetime.fromisoformat(raw).date()
+        except ValueError:
+            continue
+        entries.append((not_after, r))
+    if not entries:
+        return ""
+    entries.sort(key=lambda pair: pair[0])
+    items = []
+    for not_after, r in entries[:8]:
+        days = (not_after - today).days
+        if days < 0:
+            color, state = _RISK_COLOR["critical"], "expired"
+        elif days < 30:
+            color, state = _RISK_COLOR["high"], "days"
+        elif days < 90:
+            color, state = _RISK_COLOR["medium"], "days"
+        else:
+            color, state = _RISK_COLOR["none"], "days"
+        items.append(
+            f'<div class="deltarow"><span class="sign" '
+            f'style="color:{color}">&#9660;</span>'
+            f'<span class="dloc">{_esc(r["name"])}</span>'
+            f'<span class="n">{_esc(not_after.isoformat())}'
+            f' &middot; {state} {abs(days):,}</span></div>')
+    return ('<div class="card"><h2>Certificate expiry</h2>' + "".join(items)
+            + (f'<div class="footnote">Showing 8 of {len(entries)} '
+               f'certificate(s).</div>' if len(entries) > 8 else "") + "</div>")
 
 
 def project_completion(history: list[dict]) -> datetime | None:
@@ -302,7 +350,7 @@ def render_markdown(store: Store, run_id: int | None = None) -> str:
         "",
         f"Run {run_id}{label} - {info['started_at']}",
         "",
-        f"| assets | quantum-vulnerable | PQC-safe |",
+        "| assets | quantum-vulnerable | PQC-safe |",
         "|---|---|---|",
         f"| {total} | {vulnerable} | {safe_pct:.1f}% |",
         "",
