@@ -27,6 +27,7 @@ import sys
 import tarfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from pathlib import Path
 
 from .model import CryptoAsset, Exposure
 from .store import Store
@@ -703,6 +704,55 @@ def _cmd_policy(args: argparse.Namespace) -> int:
     return 3
 
 
+def _cmd_rollup(args: argparse.Namespace) -> int:
+    from .cbom import import_cbom
+    from .config import DEFAULT_CONFIG, ConfigError, load_config
+    from .risk import score_asset
+
+    annotations: list[dict] = []
+    cfg: dict = {}
+    config_path = args.config
+    if config_path is None and os.path.exists(DEFAULT_CONFIG):
+        config_path = DEFAULT_CONFIG
+    if config_path:
+        try:
+            cfg = load_config(config_path)
+        except (OSError, ConfigError) as exc:
+            print(f"config error: {exc}", file=sys.stderr)
+            return 2
+        annotations = cfg["annotations"]
+
+    store = Store(args.db)
+    totals = {"files": 0, "assets": 0}
+    for path in args.files:
+        stem = Path(path).stem or path
+        try:
+            with open(path, "rb") as fh:
+                doc = json.load(fh)
+            assets = import_cbom(doc)
+        except (OSError, ValueError) as exc:
+            print(f"rollup: skipping {path}: {exc}", file=sys.stderr)
+            continue
+        if annotations:
+            from .config import apply_annotations
+            apply_annotations(assets, annotations)
+        scores = {a.asset_id: score_asset(a) for a in assets}
+        label = f"estate:{stem}" + (f":{args.label}" if args.label else "")
+        run_id = store.save_run(assets, scores, label=label)
+        vulnerable = sum(1 for a in assets if a.quantum_vulnerable)
+        print(f"{path}: run {run_id}, {len(assets)} asset(s), "
+              f"{vulnerable} quantum-vulnerable")
+        totals["files"] += 1
+        totals["assets"] += len(assets)
+
+    if not totals["files"]:
+        print("rollup imported nothing", file=sys.stderr)
+        return 1
+    print(f"rollup complete: {totals['files']} estate(s), "
+          f"{totals['assets']} asset(s). Open the dashboard to compare them.")
+    return 0
+
+
 def _cmd_import(args: argparse.Namespace) -> int:
     from .cbom import import_cbom
     try:
@@ -859,6 +909,16 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("--config", metavar="TOML",
                     help="scan config (default: qday.toml if present)")
     pp.set_defaults(fn=_cmd_policy)
+
+    pr = sub.add_parser("rollup",
+                        help="import CBOM exports from many estates into one "
+                             "database, one labeled run each")
+    pr.add_argument("files", nargs="+", metavar="CBOM.json",
+                    help="CBOM files to import (one estate per file)")
+    pr.add_argument("--label", help="extra label appended to every run")
+    pr.add_argument("--config", metavar="TOML",
+                    help="apply annotations/waivers from this config")
+    pr.set_defaults(fn=_cmd_rollup)
 
     pi = sub.add_parser("import",
                         help="import a CycloneDX CBOM as a new run")
